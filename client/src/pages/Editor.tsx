@@ -13,7 +13,7 @@ import {
   Globe,
   Terminal as TerminalIcon,
 } from 'lucide-react';
-import { Link, useParams } from 'wouter';
+import { Link, useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
@@ -152,7 +152,6 @@ function getProjectStructure(files: FileNodeType, prefix = ''): string {
 export default function Editor() {
   const params = useParams();
   const projectId = params.id || '1';
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -177,7 +176,6 @@ export default function Editor() {
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
-    enabled: isAuthenticated && !authLoading,
   });
 
   const saveMutation = useMutation({
@@ -194,20 +192,11 @@ export default function Editor() {
     },
     onError: (error: Error) => {
       setSaveStatus('error');
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again to continue.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      } else {
-        toast({
-          title: 'Save failed',
-          description: 'Failed to save your changes. Please try again.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Save failed',
+        description: 'Failed to save your changes. Please try again.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -242,36 +231,24 @@ export default function Editor() {
       });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again to continue.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      } else {
-        setConsoleErrors(['Error: Failed to execute code']);
-        toast({
-          title: 'Execution failed',
-          description: 'Failed to run your code. Please try again.',
-          variant: 'destructive',
-        });
-      }
+      setConsoleErrors(['Error: Failed to execute code']);
+      toast({
+        title: 'Execution failed',
+        description: 'Failed to run your code. Please try again.',
+        variant: 'destructive',
+      });
     },
   });
 
   useEffect(() => {
     if (projectError) {
-      if (isUnauthorizedError(projectError as Error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again to continue.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      }
+      toast({
+        title: 'Error loading project',
+        description: 'Failed to load your project. Please try again.',
+        variant: 'destructive',
+      });
     }
-  }, [projectError, toast, setLocation]);
+  }, [projectError, toast]);
 
   useEffect(() => {
     if (project && openTabs.length === 0) {
@@ -286,10 +263,6 @@ export default function Editor() {
     }
   }, [project, openTabs.length]);
 
-  if (!authLoading && !isAuthenticated) {
-    setLocation('/login');
-    return null;
-  }
 
   const handleFileSelect = (path: string, content: string) => {
     const name = path.split('/').pop() || '';
@@ -420,7 +393,7 @@ export default function Editor() {
       }
     : undefined;
 
-  if (authLoading || projectLoading) {
+  if (projectLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <motion.div
