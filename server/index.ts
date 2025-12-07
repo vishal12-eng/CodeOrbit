@@ -2,9 +2,28 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
+
+// Ensure demo user exists in database
+async function ensureDemoUser() {
+  try {
+    const existingUser = await storage.getUser("demo-user");
+    if (!existingUser) {
+      await storage.upsertUser({
+        id: "demo-user",
+        email: "demo@example.com",
+        firstName: "Demo",
+        lastName: "User",
+      });
+      console.log("Demo user created successfully");
+    }
+  } catch (error) {
+    console.error("Failed to create demo user:", error);
+  }
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -60,6 +79,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Create demo user before registering routes
+  await ensureDemoUser();
+  
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

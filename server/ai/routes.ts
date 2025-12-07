@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { isAuthenticated } from "../replitAuth";
 import {
   chatCompletion,
   generateCode,
@@ -17,7 +16,7 @@ import {
 
 const router = Router();
 
-router.post("/chat", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/chat", async (req: Request, res: Response) => {
   try {
     const { messages, systemPrompt } = req.body as {
       messages: ChatMessage[];
@@ -36,7 +35,7 @@ router.post("/chat", isAuthenticated, async (req: Request, res: Response) => {
   }
 });
 
-router.post("/generate", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/generate", async (req: Request, res: Response) => {
   try {
     const { prompt, language, context } = req.body;
 
@@ -52,7 +51,7 @@ router.post("/generate", isAuthenticated, async (req: Request, res: Response) =>
   }
 });
 
-router.post("/edit", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/edit", async (req: Request, res: Response) => {
   try {
     const { instruction, code, language, context } = req.body;
 
@@ -68,7 +67,7 @@ router.post("/edit", isAuthenticated, async (req: Request, res: Response) => {
   }
 });
 
-router.post("/explain", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/explain", async (req: Request, res: Response) => {
   try {
     const { code, language } = req.body;
 
@@ -84,7 +83,7 @@ router.post("/explain", isAuthenticated, async (req: Request, res: Response) => 
   }
 });
 
-router.post("/builder/plan", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/builder/plan", async (req: Request, res: Response) => {
   try {
     const { prompt, projectStructure } = req.body;
 
@@ -100,7 +99,7 @@ router.post("/builder/plan", isAuthenticated, async (req: Request, res: Response
   }
 });
 
-router.post("/commit-message", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/commit-message", async (req: Request, res: Response) => {
   try {
     const { diff } = req.body;
 
@@ -116,7 +115,7 @@ router.post("/commit-message", isAuthenticated, async (req: Request, res: Respon
   }
 });
 
-router.post("/analyze-image", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/analyze-image", async (req: Request, res: Response) => {
   try {
     const { image, prompt } = req.body;
 
@@ -132,7 +131,7 @@ router.post("/analyze-image", isAuthenticated, async (req: Request, res: Respons
   }
 });
 
-router.post("/transcribe", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/transcribe", async (req: Request, res: Response) => {
   try {
     const { audio } = req.body;
 
@@ -149,7 +148,7 @@ router.post("/transcribe", isAuthenticated, async (req: Request, res: Response) 
   }
 });
 
-router.post("/debug", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/debug", async (req: Request, res: Response) => {
   try {
     const { code, error, language } = req.body;
 
@@ -165,7 +164,7 @@ router.post("/debug", isAuthenticated, async (req: Request, res: Response) => {
   }
 });
 
-router.post("/generate-tests", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/generate-tests", async (req: Request, res: Response) => {
   try {
     const { code, language } = req.body;
 
@@ -181,7 +180,7 @@ router.post("/generate-tests", isAuthenticated, async (req: Request, res: Respon
   }
 });
 
-router.post("/generate-docs", isAuthenticated, async (req: Request, res: Response) => {
+router.post("/generate-docs", async (req: Request, res: Response) => {
   try {
     const { code, language } = req.body;
 
