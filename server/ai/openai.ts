@@ -1,7 +1,21 @@
 import OpenAI from "openai";
 
 // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OpenAI API key not configured. Please add OPENAI_API_KEY to your secrets.");
+    }
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openai;
+}
+
+export function isAIAvailable(): boolean {
+  return !!process.env.OPENAI_API_KEY;
+}
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
@@ -38,7 +52,7 @@ export async function chatCompletion(
     ? [{ role: "system", content: systemPrompt }, ...messages]
     : messages;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: allMessages,
     max_completion_tokens: 4096,
@@ -57,7 +71,7 @@ export async function generateCode(
 ): Promise<string> {
   const systemPrompt = `You are an expert programmer. Generate clean, efficient, and well-documented ${language} code based on the user's request. Only output the code, no explanations unless specifically asked.${context ? `\n\nProject context:\n${context}` : ""}`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       { role: "system", content: systemPrompt },
@@ -72,7 +86,7 @@ export async function generateCode(
 export async function editCode(request: CodeEditRequest): Promise<string> {
   const systemPrompt = `You are an expert code editor. Modify the provided ${request.language} code according to the instruction. Only output the modified code, no explanations.${request.context ? `\n\nProject context:\n${request.context}` : ""}`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       { role: "system", content: systemPrompt },
@@ -90,7 +104,7 @@ export async function editCode(request: CodeEditRequest): Promise<string> {
 }
 
 export async function explainCode(code: string, language: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       {
@@ -130,7 +144,7 @@ Respond with a JSON object in this exact format:
   "summary": "Brief summary of the overall plan"
 }`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       { role: "system", content: systemPrompt },
@@ -144,7 +158,7 @@ Respond with a JSON object in this exact format:
 }
 
 export async function generateCommitMessage(diff: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       {
@@ -161,7 +175,7 @@ export async function generateCommitMessage(diff: string): Promise<string> {
 }
 
 export async function analyzeImage(base64Image: string, prompt: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       {
@@ -184,7 +198,7 @@ export async function analyzeImage(base64Image: string, prompt: string): Promise
 export async function transcribeAudio(audioBuffer: Buffer): Promise<string> {
   const file = new File([audioBuffer], "audio.webm", { type: "audio/webm" });
   
-  const transcription = await openai.audio.transcriptions.create({
+  const transcription = await getOpenAI().audio.transcriptions.create({
     file,
     model: "whisper-1",
   });
@@ -197,7 +211,7 @@ export async function debugCode(
   error: string,
   language: string
 ): Promise<{ explanation: string; fix: string }> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       {
@@ -217,7 +231,7 @@ export async function debugCode(
 }
 
 export async function generateTests(code: string, language: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       {
@@ -236,7 +250,7 @@ export async function generateTests(code: string, language: string): Promise<str
 }
 
 export async function generateDocs(code: string, language: string): Promise<string> {
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAI().chat.completions.create({
     model: "gpt-5",
     messages: [
       {
