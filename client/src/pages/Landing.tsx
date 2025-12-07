@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import Logo from '@/components/layout/Logo';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import PageTransition from '@/components/layout/PageTransition';
-import { useAuth } from '@/contexts/AuthContext';
 
 const features = [
   {
@@ -72,23 +71,15 @@ const itemVariants = {
 };
 
 export default function Landing() {
-  const { isAuthenticated, isLoading, login } = useAuth();
-
   return (
     <PageTransition className="min-h-screen">
       <header className="flex items-center justify-between gap-4 px-6 py-4 border-b">
         <Logo />
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          {isLoading ? null : isAuthenticated ? (
-            <Link href="/dashboard">
-              <Button data-testid="button-dashboard">Dashboard</Button>
-            </Link>
-          ) : (
-            <Button onClick={login} data-testid="button-login">
-              Log in
-            </Button>
-          )}
+          <Link href="/dashboard">
+            <Button data-testid="button-dashboard">Dashboard</Button>
+          </Link>
         </div>
       </header>
 
@@ -109,23 +100,14 @@ export default function Landing() {
                 instant execution, and seamless deployment. Build faster with the power of GPT-5.
               </p>
               <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-                {isAuthenticated ? (
-                  <Link href="/dashboard">
-                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                      <Button size="lg" className="gap-2" data-testid="button-open-dashboard">
-                        <Zap className="h-4 w-4" />
-                        Open Dashboard
-                      </Button>
-                    </motion.div>
-                  </Link>
-                ) : (
+                <Link href="/dashboard">
                   <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                    <Button size="lg" className="gap-2" onClick={login} data-testid="button-get-started">
+                    <Button size="lg" className="gap-2" data-testid="button-open-dashboard">
                       <Zap className="h-4 w-4" />
-                      Get Started Free
+                      Open Dashboard
                     </Button>
                   </motion.div>
-                )}
+                </Link>
               </div>
             </motion.div>
           </div>
@@ -189,29 +171,17 @@ export default function Landing() {
                 Sign up for free and launch your first project in seconds.
               </p>
               <div className="mt-8">
-                {isAuthenticated ? (
-                  <Link href="/dashboard">
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className="inline-block"
-                    >
-                      <Button size="lg" data-testid="button-go-to-dashboard">
-                        Go to Dashboard
-                      </Button>
-                    </motion.div>
-                  </Link>
-                ) : (
+                <Link href="/dashboard">
                   <motion.div
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     className="inline-block"
                   >
-                    <Button size="lg" onClick={login} data-testid="button-create-account">
-                      Create Free Account
+                    <Button size="lg" data-testid="button-go-to-dashboard">
+                      Go to Dashboard
                     </Button>
                   </motion.div>
-                )}
+                </Link>
               </div>
             </motion.div>
           </div>

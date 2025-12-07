@@ -1,7 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertProjectSchema, type FileNode } from "@shared/schema";
 import { spawn } from "child_process";
 import { mkdtemp, writeFile, rm } from "fs/promises";
@@ -13,14 +12,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  await setupAuth(app);
-
   app.use('/api/ai', aiRoutes);
 
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  app.get('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      const user = { id: "demo-user", email: "demo@example.com", firstName: "Demo", lastName: "User" };
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -28,9 +24,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/projects', isAuthenticated, async (req: any, res) => {
+  app.get('/api/projects', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = "demo-user";
       const projects = await storage.getProjectsByOwner(userId);
       res.json(projects);
     } catch (error) {
@@ -39,9 +35,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/projects', isAuthenticated, async (req: any, res) => {
+  app.post('/api/projects', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = "demo-user";
       const parsed = insertProjectSchema.safeParse({ ...req.body, ownerId: userId });
       
       if (!parsed.success) {
@@ -56,17 +52,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/projects/:id', isAuthenticated, async (req: any, res) => {
+  app.get('/api/projects/:id', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
       const project = await storage.getProject(req.params.id);
       
       if (!project) {
         return res.status(404).json({ message: "Project not found" });
-      }
-      
-      if (project.ownerId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
       }
       
       res.json(project);
@@ -76,17 +67,12 @@ export async function registerRoutes(
     }
   });
 
-  app.put('/api/projects/:id', isAuthenticated, async (req: any, res) => {
+  app.put('/api/projects/:id', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
       const project = await storage.getProject(req.params.id);
       
       if (!project) {
         return res.status(404).json({ message: "Project not found" });
-      }
-      
-      if (project.ownerId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
       }
 
       const updates: Partial<{ name: string; files: FileNode }> = {};
@@ -101,17 +87,12 @@ export async function registerRoutes(
     }
   });
 
-  app.delete('/api/projects/:id', isAuthenticated, async (req: any, res) => {
+  app.delete('/api/projects/:id', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
       const project = await storage.getProject(req.params.id);
       
       if (!project) {
         return res.status(404).json({ message: "Project not found" });
-      }
-      
-      if (project.ownerId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
       }
 
       await storage.deleteProject(req.params.id);
@@ -122,17 +103,13 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/projects/:id/duplicate', isAuthenticated, async (req: any, res) => {
+  app.post('/api/projects/:id/duplicate', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = "demo-user";
       const project = await storage.getProject(req.params.id);
       
       if (!project) {
         return res.status(404).json({ message: "Project not found" });
-      }
-      
-      if (project.ownerId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
       }
 
       const duplicated = await storage.createProject({
@@ -149,17 +126,12 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/run/:projectId', isAuthenticated, async (req: any, res) => {
+  app.post('/api/run/:projectId', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
       const project = await storage.getProject(req.params.projectId);
       
       if (!project) {
         return res.status(404).json({ message: "Project not found" });
-      }
-      
-      if (project.ownerId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
       }
 
       const tmpDir = await mkdtemp(path.join(tmpdir(), 'codeorbit-'));

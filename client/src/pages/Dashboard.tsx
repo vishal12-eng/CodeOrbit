@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Search, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
@@ -20,10 +20,8 @@ import ThemeToggle from '@/components/layout/ThemeToggle';
 import UserMenu from '@/components/layout/UserMenu';
 import ProjectCard from '@/components/ui/ProjectCard';
 import PageTransition from '@/components/layout/PageTransition';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { isUnauthorizedError } from '@/lib/authUtils';
 import type { Project, FileNode } from '@shared/schema';
 
 const defaultFiles: FileNode = {
@@ -35,9 +33,8 @@ const defaultFiles: FileNode = {
 };
 
 export default function Dashboard() {
-  const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -51,21 +48,9 @@ export default function Dashboard() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
 
-  const { data: projects = [], isLoading, error } = useQuery<Project[]>({
+  const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['/api/projects'],
-    enabled: isAuthenticated,
   });
-
-  useEffect(() => {
-    if (error && isUnauthorizedError(error as Error)) {
-      toast({
-        title: 'Session expired',
-        description: 'Please log in again.',
-        variant: 'destructive',
-      });
-      setLocation('/login');
-    }
-  }, [error, toast, setLocation]);
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; language: string; files: FileNode }) => {
@@ -82,20 +67,11 @@ export default function Dashboard() {
       });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      } else {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to create project.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create project.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -114,20 +90,11 @@ export default function Dashboard() {
       });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      } else {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to rename project.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to rename project.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -144,20 +111,11 @@ export default function Dashboard() {
       });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      } else {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to duplicate project.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to duplicate project.',
+        variant: 'destructive',
+      });
     },
   });
 
@@ -177,24 +135,15 @@ export default function Dashboard() {
       });
     },
     onError: (error: Error) => {
-      if (isUnauthorizedError(error)) {
-        toast({
-          title: 'Session expired',
-          description: 'Please log in again.',
-          variant: 'destructive',
-        });
-        setLocation('/login');
-      } else {
-        toast({
-          title: 'Error',
-          description: error.message || 'Failed to delete project.',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete project.',
+        variant: 'destructive',
+      });
     },
   });
 
-  if (authLoading) {
+  if (isLoading) {
     return (
       <PageTransition className="min-h-screen flex flex-col">
         <header className="flex items-center justify-between gap-4 px-6 py-4 border-b">
@@ -220,11 +169,6 @@ export default function Dashboard() {
         </main>
       </PageTransition>
     );
-  }
-
-  if (!isAuthenticated) {
-    setLocation('/login');
-    return null;
   }
 
   const filteredProjects = projects.filter((p) =>

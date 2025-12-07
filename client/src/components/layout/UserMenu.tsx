@@ -1,4 +1,4 @@
-import { LogOut, Settings, User } from 'lucide-react';
+import { Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -8,12 +8,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { useAuth } from '@/contexts/AuthContext';
 
 export default function UserMenu() {
-  const { user, logout } = useAuth();
-
-  if (!user) return null;
+  const user = { email: "demo@example.com", firstName: "Demo", lastName: "User" };
 
   const nameForInitials = user.email ?? user.firstName ?? 'User';
   const initials = nameForInitials.slice(0, 2).toUpperCase();
@@ -42,11 +39,6 @@ export default function UserMenu() {
         <DropdownMenuItem data-testid="menu-item-settings">
           <Settings className="mr-2 h-4 w-4" />
           Settings
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logout} data-testid="menu-item-logout">
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

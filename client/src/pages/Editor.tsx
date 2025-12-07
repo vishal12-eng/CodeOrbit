@@ -13,7 +13,7 @@ import {
   Globe,
   Terminal as TerminalIcon,
 } from 'lucide-react';
-import { Link, useParams, useLocation } from 'wouter';
+import { Link, useParams } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +33,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Logo from '@/components/layout/Logo';
 import ThemeToggle from '@/components/layout/ThemeToggle';
-import UserMenu from '@/components/layout/UserMenu';
 import FileTree from '@/components/editor/FileTree';
 import CodeTabs from '@/components/editor/CodeTabs';
 import CodeEditor from '@/components/editor/CodeEditor';
@@ -45,10 +44,8 @@ import WebPreview from '@/components/editor/WebPreview';
 import GitPanel from '@/components/editor/GitPanel';
 import AIPanel from '@/components/ai/AIPanel';
 import PageTransition from '@/components/layout/PageTransition';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import { isUnauthorizedError } from '@/lib/authUtils';
 import { cn } from '@/lib/utils';
 import type { FileNode as FileNodeType } from '@shared/schema';
 import type { OpenTab } from '@/lib/types';
