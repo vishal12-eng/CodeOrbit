@@ -1,0 +1,98 @@
+{
+  "colorScheme": "dark",
+  "fonts": [
+    {
+      "family": "Inter",
+      "role": "body"
+    },
+    {
+      "family": "Inter Display",
+      "role": "heading"
+    }
+  ],
+  "colors": {
+    "primary": "#2BA6FF",
+    "accent": "#1488FC",
+    "background": "#111114",
+    "textPrimary": "#FEFEFF",
+    "link": "#1488FC"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "Inter",
+      "heading": "Inter Display"
+    },
+    "fontStacks": {
+      "heading": [
+        "Inter",
+        "sans-serif"
+      ],
+      "body": [
+        "Inter"
+      ],
+      "paragraph": [
+        "Inter"
+      ]
+    },
+    "fontSizes": {
+      "h1": "48px",
+      "h2": "48px",
+      "body": "18px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "6px"
+  },
+  "components": {
+    "input": {
+      "borderColor": "#CCCCCC",
+      "borderRadius": "6px"
+    },
+    "buttonPrimary": {
+      "background": "#2BA6FF",
+      "textColor": "#FFFFFF",
+      "borderRadius": "9999px",
+      "shadow": "none"
+    },
+    "buttonSecondary": {
+      "background": "#29292C",
+      "textColor": "#FEFEFF",
+      "borderRadius": "9999px",
+      "shadow": "none"
+    }
+  },
+  "images": {
+    "logo": "File saved at: attached_assets/logo.jpg",
+    "favicon": "File saved at: attached_assets/favicon.svg",
+    "ogImage": "File saved at: attached_assets/ogImage.jpg"
+  },
+  "__framework_hints": [],
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": 2,
+      "text": "Build now",
+      "reasoning": "Button #2 has a vibrant blue background (#2BA6FF), which is the brand color and fits the criteria for a primary CTA. It also has action-oriented text 'Build now', making it the clear choice for the primary button."
+    },
+    "secondary": {
+      "index": 0,
+      "text": "See all community projects",
+      "reasoning": "Button #0 has a dark background (#29292C) and is less prominent compared to the vibrant primary button. It serves as a secondary action with the text 'See all community projects', which is less urgent than the primary action. It is from a different color group than the primary button, fulfilling the requirement."
+    },
+    "confidence": 0.95
+  },
+  "personality": {
+    "tone": "modern",
+    "energy": "medium",
+    "targetAudience": "tech-savvy individuals and developers"
+  },
+  "designSystem": {
+    "framework": "tailwind",
+    "componentLibrary": "unknown"
+  },
+  "confidence": {
+    "buttons": 0.95,
+    "colors": 0.9,
+    "overall": 0.925
+  }
+}

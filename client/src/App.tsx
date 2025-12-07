@@ -8,6 +8,7 @@ import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Editor from "@/pages/Editor";
 import Insights from "@/pages/Insights";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import { AnimatePresence } from "framer-motion";
 
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/editor/:id" component={Editor} />
         <Route path="/insights" component={Insights} />
+        <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
     </AnimatePresence>

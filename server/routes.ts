@@ -2,11 +2,15 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, type FileNode } from "@shared/schema";
-import { spawn } from "child_process";
-import { mkdtemp, writeFile, rm } from "fs/promises";
-import { tmpdir } from "os";
-import path from "path";
 import aiRoutes from "./ai/routes";
+import { 
+  runProject, 
+  stopProject,
+  detectProjectType, 
+  mapLanguageToProjectType,
+  ProjectType,
+  type RunResult 
+} from "./runners";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -126,6 +130,26 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/projects/:id/detect-type', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const detectedType = detectProjectType(project.files);
+      
+      res.json({ 
+        projectType: detectedType,
+        projectTypeLabel: getProjectTypeLabel(detectedType)
+      });
+    } catch (error) {
+      console.error("Error detecting project type:", error);
+      res.status(500).json({ message: "Failed to detect project type" });
+    }
+  });
+
   app.post('/api/run/:projectId', async (req: any, res) => {
     try {
       const project = await storage.getProject(req.params.projectId);
@@ -134,77 +158,122 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Project not found" });
       }
 
-      const tmpDir = await mkdtemp(path.join(tmpdir(), 'codeorbit-'));
-      
-      const writeFiles = async (node: FileNode, basePath: string) => {
-        if (node.type === 'file' && node.content !== undefined) {
-          await writeFile(path.join(basePath, node.name), node.content);
-        } else if (node.type === 'folder' && node.children) {
-          const { mkdir } = await import('fs/promises');
-          const folderPath = path.join(basePath, node.name);
-          await mkdir(folderPath, { recursive: true });
-          for (const child of node.children) {
-            await writeFiles(child, folderPath);
-          }
-        }
-      };
+      const language = req.body.language 
+        ? mapLanguageToProjectType(req.body.language)
+        : undefined;
 
-      if (project.files.type === 'folder' && project.files.children) {
-        for (const child of project.files.children) {
-          await writeFiles(child, tmpDir);
-        }
-      }
-
-      const startTime = Date.now();
-      
-      const result = await new Promise<{ success: boolean; stdout: string; stderr: string }>((resolve) => {
-        const mainFile = path.join(tmpDir, 'main.js');
-        const child = spawn('node', [mainFile], {
-          cwd: tmpDir,
-          timeout: 10000,
-        });
-
-        let stdout = '';
-        let stderr = '';
-
-        child.stdout.on('data', (data) => {
-          stdout += data.toString();
-        });
-
-        child.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-
-        child.on('close', (code) => {
-          resolve({
-            success: code === 0,
-            stdout,
-            stderr,
-          });
-        });
-
-        child.on('error', (err) => {
-          resolve({
-            success: false,
-            stdout: '',
-            stderr: err.message,
-          });
-        });
+      const result = await runProject({
+        projectId: req.params.projectId,
+        files: project.files,
+        language,
+        entryFile: req.body.entryFile,
+        timeout: req.body.timeout,
+        env: req.body.env,
       });
 
-      const executionTime = Date.now() - startTime;
-
-      await rm(tmpDir, { recursive: true, force: true });
-
-      res.json({
-        ...result,
-        executionTime,
-      });
+      res.json(result);
     } catch (error) {
       console.error("Error running code:", error);
       res.status(500).json({ message: "Failed to run code" });
     }
   });
 
+  app.get('/api/run/:projectId/stream', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.projectId);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      const sendEvent = (event: string, data: unknown) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      sendEvent('start', { projectId: req.params.projectId, timestamp: Date.now() });
+
+      const language = req.query.language 
+        ? mapLanguageToProjectType(req.query.language as string)
+        : undefined;
+
+      const result = await runProject({
+        projectId: req.params.projectId,
+        files: project.files,
+        language,
+        entryFile: req.query.entryFile as string | undefined,
+        callbacks: {
+          onStdout: (data: string) => {
+            sendEvent('stdout', { output: data });
+          },
+          onStderr: (data: string) => {
+            sendEvent('stderr', { output: data });
+          },
+          onComplete: (result: RunResult) => {
+            sendEvent('complete', result);
+          },
+        },
+      });
+
+      if (!res.writableEnded) {
+        sendEvent('complete', result);
+        res.end();
+      }
+
+      req.on('close', () => {
+        if (language) {
+          stopProject(language).catch(() => {});
+        }
+      });
+    } catch (error) {
+      console.error("Error streaming execution:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to stream execution" });
+      } else {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: "Execution failed" })}\n\n`);
+        res.end();
+      }
+    }
+  });
+
+  app.post('/api/run/:projectId/stop', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.projectId);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const projectType = req.body.language 
+        ? mapLanguageToProjectType(req.body.language)
+        : detectProjectType(project.files);
+
+      await stopProject(projectType);
+      
+      res.json({ success: true, message: "Project execution stopped" });
+    } catch (error) {
+      console.error("Error stopping project:", error);
+      res.status(500).json({ message: "Failed to stop project" });
+    }
+  });
+
   return httpServer;
+}
+
+function getProjectTypeLabel(projectType: ProjectType): string {
+  const labels: Record<ProjectType, string> = {
+    [ProjectType.NODEJS]: "Node.js",
+    [ProjectType.PYTHON]: "Python",
+    [ProjectType.REACT_CRA]: "React (Create React App)",
+    [ProjectType.REACT_VITE]: "React (Vite)",
+    [ProjectType.NEXTJS]: "Next.js",
+    [ProjectType.STATIC_HTML]: "Static HTML",
+  };
+  return labels[projectType] || "Unknown";
 }

@@ -1,4 +1,4 @@
-import { Sparkles } from 'lucide-react';
+import { Code2 } from 'lucide-react';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -18,15 +18,21 @@ export default function Logo({ size = 'md', showText = true }: LogoProps) {
     lg: 'text-2xl',
   };
 
+  const glowSizes = {
+    sm: 'blur-md',
+    md: 'blur-lg',
+    lg: 'blur-xl',
+  };
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" data-testid="logo-novacode">
       <div className="relative">
-        <Sparkles className={`${iconSizes[size]} text-primary`} />
-        <div className="absolute inset-0 bg-primary/20 blur-lg rounded-full" />
+        <Code2 className={`${iconSizes[size]} text-primary`} />
+        <div className={`absolute inset-0 bg-primary/30 ${glowSizes[size]} rounded-full`} />
       </div>
       {showText && (
-        <span className={`font-semibold ${textSizes[size]}`}>
-          Nova<span className="text-primary">Code</span>
+        <span className={`font-bold tracking-tight ${textSizes[size]}`}>
+          <span className="text-primary">Nova</span>Code
         </span>
       )}
     </div>

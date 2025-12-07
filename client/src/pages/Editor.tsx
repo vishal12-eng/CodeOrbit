@@ -12,10 +12,13 @@ import {
   Settings,
   Globe,
   Terminal as TerminalIcon,
+  Wand2,
+  Rocket,
 } from 'lucide-react';
 import { Link, useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -37,13 +40,15 @@ import UserMenu from '@/components/layout/UserMenu';
 import FileTree from '@/components/editor/FileTree';
 import CodeTabs from '@/components/editor/CodeTabs';
 import CodeEditor from '@/components/editor/CodeEditor';
-import Console from '@/components/editor/Console';
-import RunButton from '@/components/editor/RunButton';
+import Console, { type LogEntry } from '@/components/editor/Console';
+import RunButton, { type RunnerType, RUNNER_OPTIONS } from '@/components/editor/RunButton';
 import SaveStatus from '@/components/editor/SaveStatus';
 import Terminal, { TerminalToggle } from '@/components/editor/Terminal';
 import WebPreview from '@/components/editor/WebPreview';
 import GitPanel from '@/components/editor/GitPanel';
 import AIPanel from '@/components/ai/AIPanel';
+import BuilderMode from '@/components/ai/BuilderMode';
+import OneShotCreator from '@/components/ai/OneShotCreator';
 import PageTransition from '@/components/layout/PageTransition';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest, queryClient } from '@/lib/queryClient';
@@ -66,6 +71,12 @@ interface RunResult {
   stdout: string;
   stderr: string;
   executionTime?: number;
+  previewUrl?: string;
+}
+
+interface DetectedType {
+  projectType: string;
+  projectTypeLabel: string;
 }
 
 type LeftPanelTab = 'files' | 'git' | 'settings';
@@ -150,6 +161,35 @@ function getProjectStructure(files: FileNodeType, prefix = ''): string {
   return result;
 }
 
+function flattenFiles(node: FileNodeType, path = ''): { path: string; content: string }[] {
+  const files: { path: string; content: string }[] = [];
+  if (node.type === 'file' && node.content !== undefined) {
+    files.push({ path: path + node.name, content: node.content });
+  } else if (node.type === 'folder' && node.children) {
+    const folderPath = path ? path + node.name + '/' : '';
+    for (const child of node.children) {
+      files.push(...flattenFiles(child, folderPath));
+    }
+  }
+  return files;
+}
+
+function mapProjectTypeToRunner(projectType: string): RunnerType {
+  const mapping: Record<string, RunnerType> = {
+    'nodejs': 'nodejs',
+    'python': 'python',
+    'react-cra': 'react',
+    'react-vite': 'react',
+    'nextjs': 'nextjs',
+    'static-html': 'static',
+  };
+  return mapping[projectType] || 'nodejs';
+}
+
+function isWebProject(runner: RunnerType): boolean {
+  return ['react', 'nextjs', 'static'].includes(runner);
+}
+
 export default function Editor() {
   const params = useParams();
   const projectId = params.id || '1';
@@ -167,6 +207,15 @@ export default function Editor() {
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
 
+  const [selectedRunner, setSelectedRunner] = useState<RunnerType>('nodejs');
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [executionTime, setExecutionTime] = useState<number | undefined>(undefined);
+  const [consoleLogs, setConsoleLogs] = useState<LogEntry[]>([]);
+  const [serverLogs, setServerLogs] = useState<LogEntry[]>([]);
+
+  const [isBuilderModeOpen, setIsBuilderModeOpen] = useState(false);
+  const [isOneShotOpen, setIsOneShotOpen] = useState(false);
+
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
   const [newItemPath, setNewItemPath] = useState('');
@@ -174,10 +223,24 @@ export default function Editor() {
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingContentRef = useRef<{ path: string; content: string } | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const logIdCounter = useRef(0);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
   });
+
+  const { data: detectedType } = useQuery<DetectedType>({
+    queryKey: ['/api/projects', projectId, 'detect-type'],
+    enabled: !!projectId,
+  });
+
+  useEffect(() => {
+    if (detectedType?.projectType) {
+      const runner = mapProjectTypeToRunner(detectedType.projectType);
+      setSelectedRunner(runner);
+    }
+  }, [detectedType]);
 
   const saveMutation = useMutation({
     mutationFn: async (files: FileNodeType) => {
@@ -203,7 +266,9 @@ export default function Editor() {
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest('POST', `/api/run/${projectId}`);
+      const response = await apiRequest('POST', `/api/run/${projectId}`, {
+        language: selectedRunner,
+      });
       return response.json() as Promise<RunResult>;
     },
     onSuccess: (data: RunResult) => {
@@ -222,6 +287,14 @@ export default function Editor() {
 
       setConsoleOutput(output);
       setConsoleErrors(errors);
+      setExecutionTime(data.executionTime);
+
+      if (data.previewUrl) {
+        setPreviewUrl(data.previewUrl);
+        if (isWebProject(selectedRunner)) {
+          setIsWebPreviewOpen(true);
+        }
+      }
 
       toast({
         title: data.success ? 'Execution complete' : 'Execution failed',
@@ -264,6 +337,33 @@ export default function Editor() {
     }
   }, [project, openTabs.length]);
 
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const addLogEntry = useCallback((type: LogEntry['type'], message: string) => {
+    const entry: LogEntry = {
+      id: `log-${logIdCounter.current++}`,
+      type,
+      message,
+      timestamp: new Date(),
+    };
+    setConsoleLogs((prev) => [...prev, entry]);
+  }, []);
+
+  const addServerLog = useCallback((type: LogEntry['type'], message: string) => {
+    const entry: LogEntry = {
+      id: `server-${logIdCounter.current++}`,
+      type,
+      message,
+      timestamp: new Date(),
+    };
+    setServerLogs((prev) => [...prev, entry]);
+  }, []);
 
   const handleFileSelect = (path: string, content: string) => {
     const name = path.split('/').pop() || '';
@@ -319,16 +419,100 @@ export default function Editor() {
     [activeTab, project, saveMutation]
   );
 
-  const handleRun = async () => {
+  const handleRunWithStreaming = useCallback(() => {
     if (!project) return;
+
+    setConsoleLogs([]);
+    setServerLogs([]);
     setConsoleOutput([]);
     setConsoleErrors([]);
-    runMutation.mutate();
+    setExecutionTime(undefined);
+
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+
+    const streamUrl = `/api/run/${projectId}/stream?language=${selectedRunner}`;
+    const eventSource = new EventSource(streamUrl);
+    eventSourceRef.current = eventSource;
+
+    addLogEntry('system', `Starting ${RUNNER_OPTIONS.find(r => r.id === selectedRunner)?.label || selectedRunner} runner...`);
+
+    eventSource.addEventListener('start', (event) => {
+      const data = JSON.parse(event.data);
+      addLogEntry('info', `Execution started at ${new Date(data.timestamp).toLocaleTimeString()}`);
+    });
+
+    eventSource.addEventListener('stdout', (event) => {
+      const data = JSON.parse(event.data);
+      addLogEntry('stdout', data.output);
+    });
+
+    eventSource.addEventListener('stderr', (event) => {
+      const data = JSON.parse(event.data);
+      const isWarning = data.output.toLowerCase().includes('warning');
+      addLogEntry(isWarning ? 'warning' : 'stderr', data.output);
+    });
+
+    eventSource.addEventListener('complete', (event) => {
+      const data = JSON.parse(event.data);
+      setExecutionTime(data.executionTime);
+      
+      if (data.previewUrl) {
+        setPreviewUrl(data.previewUrl);
+        if (isWebProject(selectedRunner)) {
+          setIsWebPreviewOpen(true);
+        }
+      }
+
+      addLogEntry('system', `Execution ${data.success ? 'completed' : 'failed'}${data.executionTime ? ` in ${data.executionTime}ms` : ''}`);
+      
+      eventSource.close();
+      eventSourceRef.current = null;
+
+      toast({
+        title: data.success ? 'Execution complete' : 'Execution failed',
+        description: data.executionTime
+          ? `Completed in ${data.executionTime}ms`
+          : 'Your code has finished running.',
+        variant: data.success ? 'default' : 'destructive',
+      });
+    });
+
+    eventSource.addEventListener('error', (event) => {
+      addLogEntry('stderr', 'Streaming error occurred');
+      eventSource.close();
+      eventSourceRef.current = null;
+    });
+
+    eventSource.onerror = () => {
+      if (eventSource.readyState === EventSource.CLOSED) {
+        eventSourceRef.current = null;
+      }
+    };
+  }, [project, projectId, selectedRunner, addLogEntry, toast]);
+
+  const handleRun = async () => {
+    if (!project) return;
+    handleRunWithStreaming();
   };
 
   const handleClearConsole = () => {
     setConsoleOutput([]);
     setConsoleErrors([]);
+    setConsoleLogs([]);
+    setServerLogs([]);
+    setExecutionTime(undefined);
+  };
+
+  const handleRunnerChange = (runner: RunnerType) => {
+    setSelectedRunner(runner);
+    if (isWebProject(runner) && !isWebPreviewOpen) {
+      toast({
+        title: 'Web project selected',
+        description: 'Web preview will open automatically when you run your code.',
+      });
+    }
   };
 
   const handleCreateFile = (path: string) => {
@@ -385,6 +569,50 @@ export default function Editor() {
     });
   };
 
+  const handleBuilderApplyChanges = (files: { path: string; content: string }[]) => {
+    if (!project) return;
+    
+    toast({
+      title: 'Changes applied',
+      description: `Applied changes to ${files.length} file(s).`,
+    });
+    setIsBuilderModeOpen(false);
+    queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+  };
+
+  const handleOneShotCreateProject = async (files: { path: string; content: string }[]) => {
+    try {
+      const response = await apiRequest('POST', '/api/projects', {
+        name: 'New Generated Project',
+        language: selectedRunner,
+        files: {
+          type: 'folder',
+          name: 'root',
+          children: files.map(f => ({
+            type: 'file' as const,
+            name: f.path.split('/').pop() || f.path,
+            content: f.content,
+          })),
+        },
+      });
+      const newProject = await response.json();
+      
+      toast({
+        title: 'Project created',
+        description: 'Navigating to your new project...',
+      });
+      
+      setIsOneShotOpen(false);
+      setLocation(`/editor/${newProject.id}`);
+    } catch (error) {
+      toast({
+        title: 'Failed to create project',
+        description: 'There was an error creating your project.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const activeTabData = openTabs.find((t) => t.path === activeTab);
   const currentFileInfo = activeTabData
     ? {
@@ -393,6 +621,8 @@ export default function Editor() {
         language: getFileLanguage(activeTabData.name),
       }
     : undefined;
+
+  const projectFiles = project ? flattenFiles(project.files) : [];
 
   if (projectLoading) {
     return (
@@ -443,10 +673,38 @@ export default function Editor() {
           </Link>
           <Logo size="sm" showText={false} />
           <div className="h-4 w-px bg-border" />
-          <span className="font-medium text-sm truncate max-w-[200px]">{project.name}</span>
+          <span className="font-medium text-sm truncate max-w-[200px]" data-testid="text-project-name">
+            {project.name}
+          </span>
+          {detectedType?.projectTypeLabel && (
+            <Badge variant="secondary" className="text-[10px]" data-testid="badge-project-type">
+              {detectedType.projectTypeLabel}
+            </Badge>
+          )}
           <SaveStatus status={saveStatus} />
         </div>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsOneShotOpen(true)}
+            className="gap-1.5"
+            data-testid="button-oneshot-creator"
+          >
+            <Rocket className="h-4 w-4" />
+            <span className="hidden md:inline">Create</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsBuilderModeOpen(true)}
+            className="gap-1.5"
+            data-testid="button-builder-mode"
+          >
+            <Wand2 className="h-4 w-4" />
+            <span className="hidden md:inline">Builder</span>
+          </Button>
+          <div className="h-4 w-px bg-border mx-1" />
           <TerminalToggle isOpen={isTerminalOpen} onToggle={() => setIsTerminalOpen(!isTerminalOpen)} />
           <Button
             variant={isWebPreviewOpen ? 'default' : 'ghost'}
@@ -458,7 +716,13 @@ export default function Editor() {
             <Globe className="h-4 w-4" />
             <span className="hidden sm:inline">Preview</span>
           </Button>
-          <RunButton isRunning={runMutation.isPending} onClick={handleRun} />
+          <RunButton 
+            isRunning={runMutation.isPending || !!eventSourceRef.current} 
+            onClick={handleRun}
+            runnerType={selectedRunner}
+            onRunnerChange={handleRunnerChange}
+            showRunner={true}
+          />
           <div className="h-4 w-px bg-border mx-1" />
           <Button
             variant={isAIPanelOpen ? 'default' : 'ghost'}
@@ -578,8 +842,11 @@ export default function Editor() {
                     <Console
                       output={consoleOutput}
                       errors={consoleErrors}
-                      isRunning={runMutation.isPending}
+                      isRunning={runMutation.isPending || !!eventSourceRef.current}
                       onClear={handleClearConsole}
+                      executionTime={executionTime}
+                      logs={consoleLogs}
+                      serverLogs={serverLogs}
                     />
                   </ResizablePanel>
                 </ResizablePanelGroup>
@@ -601,6 +868,7 @@ export default function Editor() {
                   isOpen={isWebPreviewOpen}
                   onClose={() => setIsWebPreviewOpen(false)}
                   projectId={projectId}
+                  previewUrl={previewUrl}
                 />
               </ResizablePanel>
             </>
@@ -670,6 +938,26 @@ export default function Editor() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isBuilderModeOpen && (
+        <Dialog open={isBuilderModeOpen} onOpenChange={setIsBuilderModeOpen}>
+          <DialogContent className="max-w-4xl h-[80vh] p-0 overflow-hidden">
+            <BuilderMode
+              projectContext={getProjectStructure(project.files)}
+              projectFiles={projectFiles}
+              onApplyChanges={handleBuilderApplyChanges}
+              onClose={() => setIsBuilderModeOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {isOneShotOpen && (
+        <OneShotCreator
+          onCreateProject={handleOneShotCreateProject}
+          onClose={() => setIsOneShotOpen(false)}
+        />
+      )}
     </PageTransition>
   );
 }
