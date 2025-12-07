@@ -19,11 +19,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const login = () => {
-    window.location.href = '/api/login';
+    // Open in top frame to break out of iframe for OAuth redirect
+    window.open('/api/login', '_top');
   };
 
   const logout = () => {
-    window.location.href = '/api/logout';
+    // Open in top frame to break out of iframe for OAuth redirect
+    window.open('/api/logout', '_top');
   };
 
   return (
