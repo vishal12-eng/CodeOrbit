@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
   Mic,
@@ -49,8 +48,8 @@ const modeConfig = {
   edit: { icon: Code, label: "Edit Code", color: "text-green-500" },
   builder: { icon: Wand2, label: "Builder", color: "text-purple-500" },
   debug: { icon: Bug, label: "Debug", color: "text-red-500" },
-  tests: { icon: TestTube, label: "Generate Tests", color: "text-yellow-500" },
-  docs: { icon: FileText, label: "Generate Docs", color: "text-cyan-500" },
+  tests: { icon: TestTube, label: "Tests", color: "text-yellow-500" },
+  docs: { icon: FileText, label: "Docs", color: "text-cyan-500" },
 };
 
 export default function AIPanel({ currentFile, onApplyCode, projectContext }: AIPanelProps) {
@@ -249,28 +248,28 @@ export default function AIPanel({ currentFile, onApplyCode, projectContext }: AI
   const ModeIcon = modeConfig[mode].icon;
 
   return (
-    <div className="h-full flex flex-col bg-background border-l">
-      <div className="flex items-center justify-between p-3 border-b">
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-muted/30 shrink-0">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <span className="font-semibold">NovaCode AI</span>
+          <Sparkles className="h-4 w-4 text-primary" />
+          <span className="font-medium text-sm">AI Assistant</span>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <ModeIcon className={cn("h-4 w-4", modeConfig[mode].color)} />
-              {modeConfig[mode].label}
+            <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+              <ModeIcon className={cn("h-3.5 w-3.5", modeConfig[mode].color)} />
+              <span className="hidden sm:inline">{modeConfig[mode].label}</span>
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="w-40">
             {Object.entries(modeConfig).map(([key, config]) => (
               <DropdownMenuItem
                 key={key}
                 onClick={() => setMode(key as AIMode)}
-                className="gap-2"
+                className="gap-2 text-xs"
               >
-                <config.icon className={cn("h-4 w-4", config.color)} />
+                <config.icon className={cn("h-3.5 w-3.5", config.color)} />
                 {config.label}
               </DropdownMenuItem>
             ))}
@@ -278,100 +277,90 @@ export default function AIPanel({ currentFile, onApplyCode, projectContext }: AI
         </DropdownMenu>
       </div>
 
-      <ScrollArea className="flex-1 p-3" ref={scrollRef}>
-        <div className="space-y-4">
+      <ScrollArea className="flex-1" ref={scrollRef}>
+        <div className="p-3 space-y-3">
           {messages.length === 0 && (
-            <div className="text-center text-muted-foreground py-8">
-              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-sm">Start a conversation with NovaCode AI</p>
-              <p className="text-xs mt-2">
-                Current mode: <span className={modeConfig[mode].color}>{modeConfig[mode].label}</span>
+            <div className="text-center text-muted-foreground py-12">
+              <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
+              <p className="text-sm font-medium">Start a conversation</p>
+              <p className="text-xs mt-1 text-muted-foreground/70">
+                Mode: <span className={modeConfig[mode].color}>{modeConfig[mode].label}</span>
               </p>
             </div>
           )}
-          <AnimatePresence>
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className={cn(
-                  "p-3 rounded-lg",
-                  message.role === "user"
-                    ? "bg-primary/10 ml-8"
-                    : "bg-muted mr-8"
-                )}
-              >
-                {message.images && message.images.length > 0 && (
-                  <div className="flex gap-2 mb-2 flex-wrap">
-                    {message.images.map((img, i) => (
-                      <img
-                        key={i}
-                        src={`data:image/jpeg;base64,${img}`}
-                        alt="Attached"
-                        className="h-16 w-16 object-cover rounded"
-                      />
-                    ))}
-                  </div>
-                )}
-                <div className="text-sm whitespace-pre-wrap">{message.content}</div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {message.timestamp.toLocaleTimeString()}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 text-muted-foreground"
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "p-3 rounded-lg text-sm",
+                message.role === "user"
+                  ? "bg-primary/10 ml-6"
+                  : "bg-muted/50 mr-6"
+              )}
             >
+              {message.images && message.images.length > 0 && (
+                <div className="flex gap-2 mb-2 flex-wrap">
+                  {message.images.map((img, i) => (
+                    <img
+                      key={i}
+                      src={`data:image/jpeg;base64,${img}`}
+                      alt="Attached"
+                      className="h-14 w-14 object-cover rounded"
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
+              <div className="text-[10px] text-muted-foreground/60 mt-1.5">
+                {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+          ))}
+          {isLoading && (
+            <div className="flex items-center gap-2 text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm">Thinking...</span>
-            </motion.div>
+              <span className="text-xs">Thinking...</span>
+            </div>
           )}
         </div>
       </ScrollArea>
 
       {attachedImages.length > 0 && (
-        <div className="flex gap-2 px-3 py-2 border-t flex-wrap">
+        <div className="flex gap-2 px-3 py-2 border-t flex-wrap bg-muted/20">
           {attachedImages.map((img, i) => (
             <div key={i} className="relative">
               <img
                 src={`data:image/jpeg;base64,${img}`}
                 alt="Attached"
-                className="h-12 w-12 object-cover rounded"
+                className="h-10 w-10 object-cover rounded"
               />
               <button
                 onClick={() => setAttachedImages((prev) => prev.filter((_, j) => j !== i))}
                 className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5"
               >
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5" />
               </button>
             </div>
           ))}
         </div>
       )}
 
-      <div className="p-3 border-t">
-        <div className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder={`Ask NovaCode AI (${modeConfig[mode].label} mode)...`}
-            className="min-h-[60px] resize-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-        </div>
+      <div className="p-3 border-t bg-background shrink-0">
+        <Textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder={`Ask AI (${modeConfig[mode].label})...`}
+          className="min-h-[56px] max-h-[120px] resize-none text-sm"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          data-testid="input-ai-message"
+        />
         <div className="flex items-center justify-between mt-2">
-          <div className="flex gap-1">
+          <div className="flex gap-0.5">
             <input
               type="file"
               ref={fileInputRef}
@@ -383,30 +372,33 @@ export default function AIPanel({ currentFile, onApplyCode, projectContext }: AI
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               onClick={() => fileInputRef.current?.click()}
+              data-testid="button-attach-image"
             >
-              <Image className="h-4 w-4" />
+              <Image className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className={cn("h-8 w-8", isRecording && "text-red-500")}
+              className={cn("h-7 w-7", isRecording && "text-red-500 bg-red-500/10")}
               onClick={isRecording ? stopRecording : startRecording}
+              data-testid="button-voice-input"
             >
-              {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              {isRecording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
             </Button>
           </div>
           <Button
             onClick={handleSend}
             disabled={isLoading || (!input.trim() && attachedImages.length === 0)}
             size="sm"
-            className="gap-2"
+            className="h-7 gap-1.5 text-xs"
+            data-testid="button-send-ai-message"
           >
             {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send className="h-3.5 w-3.5" />
             )}
             Send
           </Button>

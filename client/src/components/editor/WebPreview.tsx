@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe,
   RefreshCw,
@@ -72,55 +71,66 @@ export default function WebPreview({ isOpen, onClose, previewUrl, projectId }: W
           align-items: center;
           justify-content: center;
           min-height: 100vh;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
           color: white;
           text-align: center;
           padding: 20px;
         }
-        .container { max-width: 600px; }
-        h1 { font-size: 2.5rem; margin-bottom: 1rem; }
-        p { font-size: 1.1rem; opacity: 0.9; margin-bottom: 2rem; }
+        .container { max-width: 500px; }
+        h1 { font-size: 1.75rem; margin-bottom: 0.75rem; font-weight: 600; }
+        p { font-size: 0.9rem; opacity: 0.7; margin-bottom: 1.5rem; line-height: 1.5; }
         .icon {
-          font-size: 4rem;
-          margin-bottom: 1.5rem;
+          width: 64px;
+          height: 64px;
+          margin: 0 auto 1.5rem;
+          background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           animation: pulse 2s infinite;
         }
+        .icon svg { width: 32px; height: 32px; }
         @keyframes pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.1); opacity: 0.8; }
+          50% { transform: scale(1.05); opacity: 0.9; }
         }
         .features {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-          gap: 1rem;
-          margin-top: 2rem;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 0.75rem;
+          margin-top: 1.5rem;
         }
         .feature {
-          background: rgba(255,255,255,0.1);
-          padding: 1rem;
-          border-radius: 12px;
-          backdrop-filter: blur(10px);
+          background: rgba(255,255,255,0.05);
+          padding: 0.75rem;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.1);
         }
-        .feature-icon { font-size: 1.5rem; margin-bottom: 0.5rem; }
-        .feature-text { font-size: 0.875rem; }
+        .feature-icon { font-size: 1.25rem; margin-bottom: 0.25rem; }
+        .feature-text { font-size: 0.7rem; opacity: 0.7; }
       </style>
     </head>
     <body>
       <div class="container">
-        <div class="icon">🚀</div>
-        <h1>NovaCode Preview</h1>
+        <div class="icon">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+          </svg>
+        </div>
+        <h1>Web Preview</h1>
         <p>Your application preview will appear here when you run your project.</p>
         <div class="features">
           <div class="feature">
-            <div class="feature-icon">⚡</div>
+            <div class="feature-icon">&#9889;</div>
             <div class="feature-text">Live Reload</div>
           </div>
           <div class="feature">
-            <div class="feature-icon">📱</div>
+            <div class="feature-icon">&#128241;</div>
             <div class="feature-text">Responsive</div>
           </div>
           <div class="feature">
-            <div class="feature-icon">🔒</div>
+            <div class="feature-icon">&#128274;</div>
             <div class="feature-text">Secure</div>
           </div>
         </div>
@@ -129,114 +139,110 @@ export default function WebPreview({ isOpen, onClose, previewUrl, projectId }: W
     </html>
   `;
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          initial={{ width: 0, opacity: 0 }}
-          animate={{ width: "40%", opacity: 1 }}
-          exit={{ width: 0, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="border-l bg-background flex flex-col overflow-hidden"
-        >
-          <div className="flex items-center gap-2 px-3 py-2 border-b bg-muted/30">
-            <Globe className="h-4 w-4 text-muted-foreground" />
-            <Input
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="Preview URL..."
-              className="h-7 text-xs flex-1"
-            />
-            <div className="flex items-center gap-1 border-l pl-2 ml-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn("h-6 w-6", deviceMode === "mobile" && "bg-muted")}
-                onClick={() => setDeviceMode("mobile")}
-              >
-                <Smartphone className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn("h-6 w-6", deviceMode === "tablet" && "bg-muted")}
-                onClick={() => setDeviceMode("tablet")}
-              >
-                <Tablet className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn("h-6 w-6", deviceMode === "desktop" && "bg-muted")}
-                onClick={() => setDeviceMode("desktop")}
-              >
-                <Monitor className="h-3 w-3" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-1 border-l pl-2 ml-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleRefresh}
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3 w-3" />
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={handleOpenExternal}
-                disabled={!url}
-              >
-                <ExternalLink className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={onClose}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          </div>
+  if (!isOpen) return null;
 
-          <div className="flex-1 bg-zinc-900 flex items-start justify-center p-4 overflow-auto">
-            <motion.div
-              animate={{
-                width: deviceSizes[deviceMode].width,
-                height: deviceSizes[deviceMode].height,
-              }}
-              transition={{ duration: 0.2 }}
-              className={cn(
-                "bg-white rounded-lg overflow-hidden shadow-2xl",
-                deviceMode !== "desktop" && "border-4 border-zinc-700"
-              )}
-              style={{
-                maxWidth: "100%",
-                maxHeight: "100%",
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                key={refreshKey}
-                srcDoc={url ? undefined : previewContent}
-                src={url || undefined}
-                onLoad={handleLoad}
-                className="w-full h-full border-0"
-                title="Web Preview"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-              />
-            </motion.div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+  return (
+    <div className="h-full flex flex-col bg-background">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 border-b bg-muted/30 shrink-0">
+        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+        <Input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="Preview URL..."
+          className="h-7 text-xs flex-1 min-w-0"
+          data-testid="input-preview-url"
+        />
+        <div className="flex items-center gap-0.5 border-l border-border/50 pl-1.5 ml-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-6 w-6", deviceMode === "mobile" && "bg-muted")}
+            onClick={() => setDeviceMode("mobile")}
+            data-testid="button-device-mobile"
+          >
+            <Smartphone className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-6 w-6", deviceMode === "tablet" && "bg-muted")}
+            onClick={() => setDeviceMode("tablet")}
+            data-testid="button-device-tablet"
+          >
+            <Tablet className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-6 w-6", deviceMode === "desktop" && "bg-muted")}
+            onClick={() => setDeviceMode("desktop")}
+            data-testid="button-device-desktop"
+          >
+            <Monitor className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-0.5 border-l border-border/50 pl-1.5 ml-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={handleRefresh}
+            disabled={isLoading}
+            data-testid="button-refresh-preview"
+          >
+            {isLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={handleOpenExternal}
+            disabled={!url}
+            data-testid="button-external-preview"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onClose}
+            data-testid="button-close-preview"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 bg-zinc-900 flex items-start justify-center p-3 overflow-auto">
+        <div
+          className={cn(
+            "bg-white rounded-lg overflow-hidden shadow-xl transition-all duration-200",
+            deviceMode !== "desktop" && "border-4 border-zinc-700"
+          )}
+          style={{
+            width: deviceSizes[deviceMode].width,
+            height: deviceSizes[deviceMode].height,
+            maxWidth: "100%",
+            maxHeight: "100%",
+          }}
+        >
+          <iframe
+            ref={iframeRef}
+            key={refreshKey}
+            srcDoc={url ? undefined : previewContent}
+            src={url || undefined}
+            onLoad={handleLoad}
+            className="w-full h-full border-0"
+            title="Web Preview"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          />
+        </div>
+      </div>
+    </div>
   );
 }

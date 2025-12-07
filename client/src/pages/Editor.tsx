@@ -423,36 +423,48 @@ export default function Editor() {
   }
 
   return (
-    <PageTransition className="h-screen flex flex-col bg-background">
-      <header className="flex items-center justify-between gap-4 px-4 py-2 border-b shrink-0 h-14">
-        <div className="flex items-center gap-3">
+    <PageTransition className="h-screen flex flex-col bg-background overflow-hidden">
+      <header className="flex items-center justify-between gap-4 px-3 border-b shrink-0 h-12 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center gap-2">
+          {!isSidebarOpen && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsSidebarOpen(true)}
+              data-testid="button-open-sidebar"
+            >
+              <PanelLeft className="h-4 w-4" />
+            </Button>
+          )}
           <Link href="/dashboard">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" data-testid="button-back-dashboard">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <Logo size="sm" showText={false} />
           <div className="h-4 w-px bg-border" />
-          <span className="font-medium text-sm">{project.name}</span>
-        </div>
-        <div className="flex items-center gap-3">
+          <span className="font-medium text-sm truncate max-w-[200px]">{project.name}</span>
           <SaveStatus status={saveStatus} />
+        </div>
+        <div className="flex items-center gap-1">
           <TerminalToggle isOpen={isTerminalOpen} onToggle={() => setIsTerminalOpen(!isTerminalOpen)} />
           <Button
-            variant={isWebPreviewOpen ? 'secondary' : 'ghost'}
+            variant={isWebPreviewOpen ? 'default' : 'ghost'}
             size="sm"
             onClick={() => setIsWebPreviewOpen(!isWebPreviewOpen)}
-            className="gap-2"
+            className="gap-1.5"
+            data-testid="button-toggle-preview"
           >
             <Globe className="h-4 w-4" />
-            Preview
+            <span className="hidden sm:inline">Preview</span>
           </Button>
           <RunButton isRunning={runMutation.isPending} onClick={handleRun} />
-          <div className="h-4 w-px bg-border" />
+          <div className="h-4 w-px bg-border mx-1" />
           <Button
-            variant={isAIPanelOpen ? 'secondary' : 'ghost'}
+            variant={isAIPanelOpen ? 'default' : 'ghost'}
             size="icon"
             onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
+            data-testid="button-toggle-ai"
           >
             <Sparkles className="h-4 w-4" />
           </Button>
@@ -461,99 +473,80 @@ export default function Editor() {
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col min-h-0">
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-          <AnimatePresence initial={false}>
-            {isSidebarOpen && (
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: 'auto' }}
-                exit={{ width: 0 }}
-                transition={{ duration: 0.2 }}
-                className="relative"
-              >
-                <ResizablePanel defaultSize={20} minSize={15} maxSize={35}>
-                  <div className="h-full bg-muted/20 flex flex-col">
-                    <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b">
-                      <Tabs
-                        value={leftPanelTab}
-                        onValueChange={(v) => setLeftPanelTab(v as LeftPanelTab)}
-                        className="w-full"
-                      >
-                        <TabsList className="h-8 w-full grid grid-cols-3">
-                          <TabsTrigger value="files" className="text-xs gap-1 px-2">
-                            <FolderTree className="h-3 w-3" />
-                            Files
-                          </TabsTrigger>
-                          <TabsTrigger value="git" className="text-xs gap-1 px-2">
-                            <GitBranch className="h-3 w-3" />
-                            Git
-                          </TabsTrigger>
-                          <TabsTrigger value="settings" className="text-xs gap-1 px-2">
-                            <Settings className="h-3 w-3" />
-                            Settings
-                          </TabsTrigger>
-                        </TabsList>
-                      </Tabs>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => setIsSidebarOpen(false)}
-                      >
-                        <PanelLeftClose className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      {leftPanelTab === 'files' && (
-                        <FileTree
-                          files={project.files}
-                          activeFile={activeTab}
-                          onFileSelect={handleFileSelect}
-                          onCreateFile={handleCreateFile}
-                          onCreateFolder={handleCreateFolder}
-                          onRename={handleRenameItem}
-                          onDelete={handleDeleteItem}
-                        />
-                      )}
-                      {leftPanelTab === 'git' && (
-                        <GitPanel projectId={projectId} />
-                      )}
-                      {leftPanelTab === 'settings' && (
-                        <div className="p-4 space-y-4">
-                          <h3 className="font-medium text-sm">Editor Settings</h3>
-                          <div className="space-y-2">
-                            <Label className="text-xs">Font Size</Label>
-                            <Input type="number" defaultValue={14} min={10} max={24} className="h-8" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-xs">Tab Size</Label>
-                            <Input type="number" defaultValue={2} min={2} max={8} className="h-8" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
+      <div className="flex-1 min-h-0">
+        <ResizablePanelGroup direction="horizontal" className="h-full">
+          {isSidebarOpen && (
+            <>
+              <ResizablePanel defaultSize={18} minSize={12} maxSize={30} className="min-w-[180px]">
+                <div className="h-full bg-muted/30 flex flex-col border-r">
+                  <div className="flex items-center gap-1 px-2 py-2 border-b bg-background/50">
+                    <Tabs
+                      value={leftPanelTab}
+                      onValueChange={(v) => setLeftPanelTab(v as LeftPanelTab)}
+                      className="flex-1"
+                    >
+                      <TabsList className="h-8 w-full grid grid-cols-3 bg-muted/50">
+                        <TabsTrigger value="files" className="text-xs gap-1 px-1.5 data-[state=active]:bg-background">
+                          <FolderTree className="h-3.5 w-3.5" />
+                          <span className="hidden lg:inline">Files</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="git" className="text-xs gap-1 px-1.5 data-[state=active]:bg-background">
+                          <GitBranch className="h-3.5 w-3.5" />
+                          <span className="hidden lg:inline">Git</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="settings" className="text-xs gap-1 px-1.5 data-[state=active]:bg-background">
+                          <Settings className="h-3.5 w-3.5" />
+                          <span className="hidden lg:inline">Settings</span>
+                        </TabsTrigger>
+                      </TabsList>
+                    </Tabs>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => setIsSidebarOpen(false)}
+                      data-testid="button-close-sidebar"
+                    >
+                      <PanelLeftClose className="h-4 w-4" />
+                    </Button>
                   </div>
-                </ResizablePanel>
-                <ResizableHandle withHandle />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <ResizablePanel defaultSize={isAIPanelOpen ? 50 : 80}>
-            <div className="h-full flex flex-col">
-              {!isSidebarOpen && (
-                <div className="absolute left-2 top-16 z-10">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setIsSidebarOpen(true)}
-                  >
-                    <PanelLeft className="h-4 w-4" />
-                  </Button>
+                  <div className="flex-1 overflow-hidden">
+                    {leftPanelTab === 'files' && (
+                      <FileTree
+                        files={project.files}
+                        activeFile={activeTab}
+                        onFileSelect={handleFileSelect}
+                        onCreateFile={handleCreateFile}
+                        onCreateFolder={handleCreateFolder}
+                        onRename={handleRenameItem}
+                        onDelete={handleDeleteItem}
+                      />
+                    )}
+                    {leftPanelTab === 'git' && (
+                      <GitPanel projectId={projectId} />
+                    )}
+                    {leftPanelTab === 'settings' && (
+                      <div className="p-3 space-y-4">
+                        <h3 className="font-medium text-sm">Editor Settings</h3>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Font Size</Label>
+                          <Input type="number" defaultValue={14} min={10} max={24} className="h-8" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-muted-foreground">Tab Size</Label>
+                          <Input type="number" defaultValue={2} min={2} max={8} className="h-8" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
+              </ResizablePanel>
+              <ResizableHandle withHandle className="w-1 bg-border/50 hover:bg-primary/20 transition-colors" />
+            </>
+          )}
 
+          <ResizablePanel defaultSize={isAIPanelOpen ? 55 : 82} minSize={30}>
+            <div className="h-full flex flex-col bg-background">
               <CodeTabs
                 tabs={openTabs}
                 activeTab={activeTab}
@@ -561,68 +554,70 @@ export default function Editor() {
                 onTabClose={handleTabClose}
               />
 
-              <ResizablePanelGroup direction="vertical" className="flex-1">
-                <ResizablePanel defaultSize={70} minSize={30}>
-                  {activeTabData ? (
-                    <CodeEditor
-                      value={activeTabData.content}
-                      onChange={handleEditorChange}
-                      language={getFileLanguage(activeTabData.name)}
-                    />
-                  ) : (
-                    <div className="h-full flex items-center justify-center text-muted-foreground">
-                      <div className="text-center">
-                        <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-30" />
-                        <p className="mb-2">No file open</p>
-                        <p className="text-sm">Select a file from the explorer to start editing</p>
+              <div className="flex-1 min-h-0 flex flex-col">
+                <ResizablePanelGroup direction="vertical" className="flex-1">
+                  <ResizablePanel defaultSize={isTerminalOpen ? 55 : 70} minSize={20}>
+                    {activeTabData ? (
+                      <CodeEditor
+                        value={activeTabData.content}
+                        onChange={handleEditorChange}
+                        language={getFileLanguage(activeTabData.name)}
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center text-muted-foreground bg-muted/10">
+                        <div className="text-center">
+                          <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                          <p className="mb-1 font-medium">No file open</p>
+                          <p className="text-sm text-muted-foreground/70">Select a file from the explorer to start editing</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </ResizablePanel>
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={30} minSize={15}>
-                  <Console
-                    output={consoleOutput}
-                    errors={consoleErrors}
-                    isRunning={runMutation.isPending}
-                    onClear={handleClearConsole}
-                  />
-                </ResizablePanel>
-              </ResizablePanelGroup>
+                    )}
+                  </ResizablePanel>
+                  <ResizableHandle withHandle className="h-1 bg-border/50 hover:bg-primary/20 transition-colors" />
+                  <ResizablePanel defaultSize={isTerminalOpen ? 20 : 30} minSize={10} maxSize={50}>
+                    <Console
+                      output={consoleOutput}
+                      errors={consoleErrors}
+                      isRunning={runMutation.isPending}
+                      onClear={handleClearConsole}
+                    />
+                  </ResizablePanel>
+                </ResizablePanelGroup>
 
-              <Terminal
-                projectId={projectId}
-                isOpen={isTerminalOpen}
-                onToggle={() => setIsTerminalOpen(!isTerminalOpen)}
-              />
+                <Terminal
+                  projectId={projectId}
+                  isOpen={isTerminalOpen}
+                  onToggle={() => setIsTerminalOpen(!isTerminalOpen)}
+                />
+              </div>
             </div>
           </ResizablePanel>
 
-          <WebPreview
-            isOpen={isWebPreviewOpen}
-            onClose={() => setIsWebPreviewOpen(false)}
-            projectId={projectId}
-          />
+          {isWebPreviewOpen && (
+            <>
+              <ResizableHandle withHandle className="w-1 bg-border/50 hover:bg-primary/20 transition-colors" />
+              <ResizablePanel defaultSize={35} minSize={20} maxSize={50}>
+                <WebPreview
+                  isOpen={isWebPreviewOpen}
+                  onClose={() => setIsWebPreviewOpen(false)}
+                  projectId={projectId}
+                />
+              </ResizablePanel>
+            </>
+          )}
 
-          <AnimatePresence initial={false}>
-            {isAIPanelOpen && (
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: 'auto' }}
-                exit={{ width: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <ResizableHandle withHandle />
-                <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
-                  <AIPanel
-                    currentFile={currentFileInfo}
-                    onApplyCode={handleApplyAICode}
-                    projectContext={project ? getProjectStructure(project.files) : undefined}
-                  />
-                </ResizablePanel>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {isAIPanelOpen && (
+            <>
+              <ResizableHandle withHandle className="w-1 bg-border/50 hover:bg-primary/20 transition-colors" />
+              <ResizablePanel defaultSize={27} minSize={18} maxSize={45}>
+                <AIPanel
+                  currentFile={currentFileInfo}
+                  onApplyCode={handleApplyAICode}
+                  projectContext={project ? getProjectStructure(project.files) : undefined}
+                />
+              </ResizablePanel>
+            </>
+          )}
         </ResizablePanelGroup>
       </div>
 
