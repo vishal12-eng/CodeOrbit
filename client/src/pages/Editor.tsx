@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { Link, useParams, useLocation } from 'wouter';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
   ResizableHandle,
@@ -29,112 +30,77 @@ import SaveStatus from '@/components/editor/SaveStatus';
 import PageTransition from '@/components/layout/PageTransition';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { Project, FileNode, OpenTab } from '@/lib/types';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { isUnauthorizedError } from '@/lib/authUtils';
+import type { FileNode } from '@shared/schema';
+import type { OpenTab } from '@/lib/types';
 
-// todo: remove mock functionality - replace with API data
-const getMockProject = (id: string): Project => ({
-  id,
-  ownerId: '1',
-  name: id === '1' ? 'Hello World' : id === '2' ? 'API Server' : 'Todo App',
-  createdAt: '2024-12-01T10:00:00Z',
-  updatedAt: '2024-12-05T14:30:00Z',
-  language: 'node-js',
-  files: {
-    type: 'folder',
-    name: 'root',
-    children: [
-      {
-        type: 'file',
-        name: 'main.js',
-        content: `// Welcome to CodeOrbit!
-// Click Run to execute your code
-
-function greet(name) {
-  return \`Hello, \${name}! Welcome to CodeOrbit.\`;
+interface Project {
+  id: string;
+  ownerId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  language: string;
+  files: FileNode;
 }
 
-console.log(greet('Developer'));
-console.log('');
-console.log('Your code ran successfully!');
-
-// Try editing this code and running it again
-for (let i = 1; i <= 5; i++) {
-  console.log(\`Count: \${i}\`);
-}`,
-      },
-      {
-        type: 'folder',
-        name: 'src',
-        children: [
-          {
-            type: 'file',
-            name: 'utils.js',
-            content: `// Utility functions
-
-export function formatDate(date) {
-  return new Date(date).toLocaleDateString();
+interface RunResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  executionTime?: number;
 }
 
-export function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}`,
-          },
-          {
-            type: 'file',
-            name: 'config.js',
-            content: `// Configuration
+function deepCloneFileNode(node: FileNode): FileNode {
+  return JSON.parse(JSON.stringify(node));
+}
 
-module.exports = {
-  appName: 'CodeOrbit',
-  version: '1.0.0',
-  environment: 'development',
-};`,
-          },
-        ],
-      },
-      {
-        type: 'file',
-        name: 'package.json',
-        content: `{
-  "name": "my-project",
-  "version": "1.0.0",
-  "description": "A CodeOrbit project",
-  "main": "main.js",
-  "scripts": {
-    "start": "node main.js"
+function updateFileInTree(root: FileNode, targetPath: string, newContent: string): FileNode {
+  const cloned = deepCloneFileNode(root);
+  const parts = targetPath.split('/').filter(Boolean);
+  
+  function traverse(node: FileNode, pathIndex: number): boolean {
+    const currentPart = parts[pathIndex];
+    
+    if (node.type === 'folder' && node.children) {
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        if (child.name === currentPart) {
+          if (pathIndex === parts.length - 1) {
+            if (child.type === 'file') {
+              child.content = newContent;
+              return true;
+            }
+          } else {
+            return traverse(child, pathIndex + 1);
+          }
+        }
+      }
+    }
+    return false;
   }
-}`,
-      },
-      {
-        type: 'file',
-        name: 'README.md',
-        content: `# My Project
-
-This is a CodeOrbit project.
-
-## Getting Started
-
-Click the **Run** button to execute your code.`,
-      },
-    ],
-  },
-});
+  
+  if (parts[0] === 'root') {
+    traverse(cloned, 1);
+  } else {
+    traverse(cloned, 0);
+  }
+  
+  return cloned;
+}
 
 export default function Editor() {
   const params = useParams();
   const projectId = params.id || '1';
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  // todo: remove mock functionality - fetch from API
-  const [project, setProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeTab, setActiveTab] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'unsaved'>('saved');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isRunning, setIsRunning] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const [consoleErrors, setConsoleErrors] = useState<string[]>([]);
 
@@ -144,19 +110,109 @@ export default function Editor() {
   const [newItemName, setNewItemName] = useState('');
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const pendingContentRef = useRef<{ path: string; content: string } | null>(null);
 
-  // Load project
+  const { data: project, isLoading: projectLoading, error: projectError } = useQuery<Project>({
+    queryKey: ['/api/projects', projectId],
+    enabled: isAuthenticated && !authLoading,
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (files: FileNode) => {
+      const response = await apiRequest('PUT', `/api/projects/${projectId}`, { files });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+      setOpenTabs((tabs) =>
+        tabs.map((t) => (t.path === activeTab ? { ...t, isDirty: false } : t))
+      );
+      setSaveStatus('saved');
+    },
+    onError: (error: Error) => {
+      setSaveStatus('error');
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again to continue.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      } else {
+        toast({
+          title: 'Save failed',
+          description: 'Failed to save your changes. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    },
+  });
+
+  const runMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', `/api/run/${projectId}`);
+      return response.json() as Promise<RunResult>;
+    },
+    onSuccess: (data: RunResult) => {
+      const output: string[] = [];
+      const errors: string[] = [];
+
+      if (data.stdout) {
+        output.push(...data.stdout.split('\n').filter(Boolean));
+      }
+      if (data.stderr) {
+        errors.push(...data.stderr.split('\n').filter(Boolean));
+      }
+      if (!data.stdout && !data.stderr) {
+        output.push('Program executed successfully (no output)');
+      }
+
+      setConsoleOutput(output);
+      setConsoleErrors(errors);
+
+      toast({
+        title: data.success ? 'Execution complete' : 'Execution failed',
+        description: data.executionTime 
+          ? `Completed in ${data.executionTime}ms`
+          : 'Your code has finished running.',
+        variant: data.success ? 'default' : 'destructive',
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again to continue.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      } else {
+        setConsoleErrors(['Error: Failed to execute code']);
+        toast({
+          title: 'Execution failed',
+          description: 'Failed to run your code. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    },
+  });
+
   useEffect(() => {
-    // todo: remove mock functionality - fetch from API
-    const loadProject = async () => {
-      setIsLoading(true);
-      await new Promise((r) => setTimeout(r, 500));
-      const proj = getMockProject(projectId);
-      setProject(proj);
-      setIsLoading(false);
+    if (projectError) {
+      if (isUnauthorizedError(projectError as Error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again to continue.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      }
+    }
+  }, [projectError, toast, setLocation]);
 
-      // Auto-open main.js
-      const mainFile = proj.files.children?.find(
+  useEffect(() => {
+    if (project && openTabs.length === 0) {
+      const mainFile = project.files.children?.find(
         (f) => f.type === 'file' && f.name === 'main.js'
       );
       if (mainFile && mainFile.content !== undefined) {
@@ -164,12 +220,10 @@ export default function Editor() {
         setOpenTabs([{ path, name: mainFile.name, content: mainFile.content, isDirty: false }]);
         setActiveTab(path);
       }
-    };
-    loadProject();
-  }, [projectId]);
+    }
+  }, [project, openTabs.length]);
 
-  // Redirect if not authenticated
-  if (!isAuthenticated) {
+  if (!authLoading && !isAuthenticated) {
     setLocation('/login');
     return null;
   }
@@ -199,7 +253,7 @@ export default function Editor() {
 
   const handleEditorChange = useCallback(
     (value: string) => {
-      if (!activeTab) return;
+      if (!activeTab || !project) return;
 
       setOpenTabs((tabs) =>
         tabs.map((t) =>
@@ -208,70 +262,31 @@ export default function Editor() {
       );
       setSaveStatus('unsaved');
 
-      // Debounced auto-save
+      pendingContentRef.current = { path: activeTab, content: value };
+
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      saveTimeoutRef.current = setTimeout(async () => {
-        setSaveStatus('saving');
-        // todo: remove mock functionality - implement API call
-        await new Promise((r) => setTimeout(r, 800));
-        setOpenTabs((tabs) =>
-          tabs.map((t) => (t.path === activeTab ? { ...t, isDirty: false } : t))
-        );
-        setSaveStatus('saved');
+      saveTimeoutRef.current = setTimeout(() => {
+        if (pendingContentRef.current && project) {
+          setSaveStatus('saving');
+          const updatedFiles = updateFileInTree(
+            project.files,
+            pendingContentRef.current.path,
+            pendingContentRef.current.content
+          );
+          saveMutation.mutate(updatedFiles);
+        }
       }, 1500);
     },
-    [activeTab]
+    [activeTab, project, saveMutation]
   );
 
   const handleRun = async () => {
     if (!project) return;
-    setIsRunning(true);
     setConsoleOutput([]);
     setConsoleErrors([]);
-
-    // todo: remove mock functionality - implement API call
-    await new Promise((r) => setTimeout(r, 1000));
-
-    // Find the active tab content or main.js
-    const activeContent = openTabs.find((t) => t.path === activeTab)?.content || '';
-    
-    // Mock execution - simulate running the code
-    try {
-      // Capture console.log statements from the code
-      const logStatements: string[] = [];
-      const logRegex = /console\.log\((.*?)\)/g;
-      let match;
-      while ((match = logRegex.exec(activeContent)) !== null) {
-        try {
-          // Simple evaluation for string literals and template literals
-          let arg = match[1].trim();
-          if (arg.startsWith('`') && arg.endsWith('`')) {
-            arg = arg.slice(1, -1).replace(/\$\{.*?\}/g, '[value]');
-          } else if (arg.startsWith("'") || arg.startsWith('"')) {
-            arg = arg.slice(1, -1);
-          }
-          logStatements.push(arg);
-        } catch {
-          logStatements.push(match[1]);
-        }
-      }
-
-      if (logStatements.length > 0) {
-        setConsoleOutput(logStatements);
-      } else {
-        setConsoleOutput(['Program executed successfully (no output)']);
-      }
-    } catch (err) {
-      setConsoleErrors(['Error executing code']);
-    }
-
-    setIsRunning(false);
-    toast({
-      title: 'Execution complete',
-      description: 'Your code has finished running.',
-    });
+    runMutation.mutate();
   };
 
   const handleClearConsole = () => {
@@ -293,7 +308,6 @@ export default function Editor() {
 
   const handleConfirmNewFile = () => {
     if (!newItemName.trim() || !project) return;
-    // todo: remove mock functionality - implement file creation
     const fileName = newItemName.includes('.') ? newItemName : `${newItemName}.js`;
     toast({
       title: 'File created',
@@ -304,7 +318,6 @@ export default function Editor() {
 
   const handleConfirmNewFolder = () => {
     if (!newItemName.trim() || !project) return;
-    // todo: remove mock functionality - implement folder creation
     toast({
       title: 'Folder created',
       description: `"${newItemName}" has been created.`,
@@ -328,16 +341,30 @@ export default function Editor() {
 
   const activeTabData = openTabs.find((t) => t.path === activeTab);
 
-  if (isLoading || !project) {
+  if (authLoading || projectLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-background">
         <motion.div
           animate={{ opacity: [1, 0.5, 1] }}
           transition={{ duration: 1.5, repeat: Infinity }}
           className="text-lg"
+          data-testid="loading-indicator"
         >
           Loading project...
         </motion.div>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <p className="text-lg mb-4">Project not found</p>
+          <Link href="/dashboard">
+            <Button data-testid="button-back-to-dashboard">Back to Dashboard</Button>
+          </Link>
+        </div>
       </div>
     );
   }
@@ -359,7 +386,7 @@ export default function Editor() {
         </div>
         <div className="flex items-center gap-3">
           <SaveStatus status={saveStatus} />
-          <RunButton isRunning={isRunning} onClick={handleRun} />
+          <RunButton isRunning={runMutation.isPending} onClick={handleRun} />
           <div className="h-4 w-px bg-border" />
           <ThemeToggle />
           <UserMenu />
@@ -459,7 +486,7 @@ export default function Editor() {
               <Console
                 output={consoleOutput}
                 errors={consoleErrors}
-                isRunning={isRunning}
+                isRunning={runMutation.isPending}
                 onClear={handleClearConsole}
               />
             </div>

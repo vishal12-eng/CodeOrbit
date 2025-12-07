@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { Project } from '@/lib/types';
+import type { Project } from '@shared/schema';
 
 interface ProjectCardProps {
   project: Project;
@@ -27,8 +27,9 @@ export default function ProjectCard({
   onDelete,
   index = 0,
 }: ProjectCardProps) {
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+  const formatDate = (dateValue: Date | string | null) => {
+    if (!dateValue) return 'Unknown';
+    const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',

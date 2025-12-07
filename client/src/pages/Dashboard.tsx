@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Search, Loader2 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -21,71 +22,27 @@ import ProjectCard from '@/components/ui/ProjectCard';
 import PageTransition from '@/components/layout/PageTransition';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import type { Project } from '@/lib/types';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import { isUnauthorizedError } from '@/lib/authUtils';
+import type { Project, FileNode } from '@shared/schema';
 
-// todo: remove mock functionality - replace with API data
-const mockProjects: Project[] = [
-  {
-    id: '1',
-    ownerId: '1',
-    name: 'Hello World',
-    createdAt: '2024-12-01T10:00:00Z',
-    updatedAt: '2024-12-05T14:30:00Z',
-    language: 'node-js',
-    files: {
-      type: 'folder',
-      name: 'root',
-      children: [
-        { type: 'file', name: 'main.js', content: "console.log('Hello, World!');" },
-      ],
-    },
-  },
-  {
-    id: '2',
-    ownerId: '1',
-    name: 'API Server',
-    createdAt: '2024-12-02T09:00:00Z',
-    updatedAt: '2024-12-06T11:20:00Z',
-    language: 'node-js',
-    files: {
-      type: 'folder',
-      name: 'root',
-      children: [
-        { type: 'file', name: 'server.js', content: "const http = require('http');\n\nconst server = http.createServer((req, res) => {\n  res.writeHead(200, { 'Content-Type': 'text/plain' });\n  res.end('Hello from API Server!');\n});\n\nserver.listen(3000, () => {\n  console.log('Server running on port 3000');\n});" },
-        { type: 'file', name: 'package.json', content: '{\n  "name": "api-server",\n  "version": "1.0.0"\n}' },
-      ],
-    },
-  },
-  {
-    id: '3',
-    ownerId: '1',
-    name: 'Todo App',
-    createdAt: '2024-12-03T15:00:00Z',
-    updatedAt: '2024-12-07T09:45:00Z',
-    language: 'node-js',
-    files: {
-      type: 'folder',
-      name: 'root',
-      children: [
-        { type: 'file', name: 'main.js', content: "const todos = [];\n\nfunction addTodo(text) {\n  todos.push({ id: Date.now(), text, done: false });\n}\n\nfunction listTodos() {\n  todos.forEach(t => console.log(`[${t.done ? 'x' : ' '}] ${t.text}`));\n}\n\naddTodo('Learn JavaScript');\naddTodo('Build a project');\nlistTodos();" },
-      ],
-    },
-  },
-];
+const defaultFiles: FileNode = {
+  type: 'folder',
+  name: 'root',
+  children: [
+    { type: 'file', name: 'main.js', content: "console.log('Hello from CodeOrbit!');" },
+  ],
+};
 
 export default function Dashboard() {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
-  // todo: remove mock functionality - replace with API calls
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
-  const [isCreating, setIsCreating] = useState(false);
   
   const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [renameProjectId, setRenameProjectId] = useState<string | null>(null);
@@ -94,7 +51,177 @@ export default function Dashboard() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
 
-  // Redirect if not authenticated
+  const { data: projects = [], isLoading, error } = useQuery<Project[]>({
+    queryKey: ['/api/projects'],
+    enabled: isAuthenticated,
+  });
+
+  useEffect(() => {
+    if (error && isUnauthorizedError(error as Error)) {
+      toast({
+        title: 'Session expired',
+        description: 'Please log in again.',
+        variant: 'destructive',
+      });
+      setLocation('/login');
+    }
+  }, [error, toast, setLocation]);
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { name: string; language: string; files: FileNode }) => {
+      const res = await apiRequest('POST', '/api/projects', data);
+      return res.json();
+    },
+    onSuccess: (newProject: Project) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      setNewProjectName('');
+      setIsCreateDialogOpen(false);
+      toast({
+        title: 'Project created',
+        description: `"${newProject.name}" has been created.`,
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      } else {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to create project.',
+          variant: 'destructive',
+        });
+      }
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const res = await apiRequest('PUT', `/api/projects/${id}`, { name });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      setIsRenameDialogOpen(false);
+      setRenameProjectId(null);
+      toast({
+        title: 'Project renamed',
+        description: `Project has been renamed to "${renameValue.trim()}".`,
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      } else {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to rename project.',
+          variant: 'destructive',
+        });
+      }
+    },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest('POST', `/api/projects/${id}/duplicate`, {});
+      return res.json();
+    },
+    onSuccess: (duplicate: Project) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      toast({
+        title: 'Project duplicated',
+        description: `"${duplicate.name}" has been created.`,
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      } else {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to duplicate project.',
+          variant: 'destructive',
+        });
+      }
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/projects/${id}`);
+      return id;
+    },
+    onSuccess: () => {
+      const project = projects.find((p) => p.id === deleteProjectId);
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      setIsDeleteDialogOpen(false);
+      setDeleteProjectId(null);
+      toast({
+        title: 'Project deleted',
+        description: `"${project?.name}" has been deleted.`,
+      });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again.',
+          variant: 'destructive',
+        });
+        setLocation('/login');
+      } else {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to delete project.',
+          variant: 'destructive',
+        });
+      }
+    },
+  });
+
+  if (authLoading) {
+    return (
+      <PageTransition className="min-h-screen flex flex-col">
+        <header className="flex items-center justify-between gap-4 px-6 py-4 border-b">
+          <Skeleton className="h-8 w-32" />
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-9 w-9 rounded-md" />
+            <Skeleton className="h-9 w-9 rounded-full" />
+          </div>
+        </header>
+        <main className="flex-1 px-6 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+            <Skeleton className="h-10 w-full max-w-md mb-6" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-40 rounded-xl" />
+              ))}
+            </div>
+          </div>
+        </main>
+      </PageTransition>
+    );
+  }
+
   if (!isAuthenticated) {
     setLocation('/login');
     return null;
@@ -104,7 +231,7 @@ export default function Dashboard() {
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateProject = async () => {
+  const handleCreateProject = () => {
     if (!newProjectName.trim()) {
       toast({
         title: 'Error',
@@ -113,31 +240,10 @@ export default function Dashboard() {
       });
       return;
     }
-    setIsCreating(true);
-    // todo: remove mock functionality - implement API call
-    await new Promise((r) => setTimeout(r, 500));
-    const newProject: Project = {
-      id: String(Date.now()),
-      ownerId: user?.id || '1',
+    createMutation.mutate({
       name: newProjectName.trim(),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       language: 'node-js',
-      files: {
-        type: 'folder',
-        name: 'root',
-        children: [
-          { type: 'file', name: 'main.js', content: "console.log('Hello from CodeOrbit!');" },
-        ],
-      },
-    };
-    setProjects([newProject, ...projects]);
-    setNewProjectName('');
-    setIsCreateDialogOpen(false);
-    setIsCreating(false);
-    toast({
-      title: 'Project created',
-      description: `"${newProject.name}" has been created.`,
+      files: defaultFiles,
     });
   };
 
@@ -154,40 +260,13 @@ export default function Dashboard() {
     }
   };
 
-  const handleConfirmRename = async () => {
+  const handleConfirmRename = () => {
     if (!renameValue.trim() || !renameProjectId) return;
-    // todo: remove mock functionality - implement API call
-    await new Promise((r) => setTimeout(r, 300));
-    setProjects(
-      projects.map((p) =>
-        p.id === renameProjectId ? { ...p, name: renameValue.trim(), updatedAt: new Date().toISOString() } : p
-      )
-    );
-    setIsRenameDialogOpen(false);
-    setRenameProjectId(null);
-    toast({
-      title: 'Project renamed',
-      description: `Project has been renamed to "${renameValue.trim()}".`,
-    });
+    renameMutation.mutate({ id: renameProjectId, name: renameValue.trim() });
   };
 
-  const handleDuplicateProject = async (id: string) => {
-    const project = projects.find((p) => p.id === id);
-    if (!project) return;
-    // todo: remove mock functionality - implement API call
-    await new Promise((r) => setTimeout(r, 300));
-    const duplicate: Project = {
-      ...project,
-      id: String(Date.now()),
-      name: `${project.name} (Copy)`,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    setProjects([duplicate, ...projects]);
-    toast({
-      title: 'Project duplicated',
-      description: `"${duplicate.name}" has been created.`,
-    });
+  const handleDuplicateProject = (id: string) => {
+    duplicateMutation.mutate(id);
   };
 
   const handleDeleteProject = (id: string) => {
@@ -195,18 +274,9 @@ export default function Dashboard() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = () => {
     if (!deleteProjectId) return;
-    // todo: remove mock functionality - implement API call
-    await new Promise((r) => setTimeout(r, 300));
-    const project = projects.find((p) => p.id === deleteProjectId);
-    setProjects(projects.filter((p) => p.id !== deleteProjectId));
-    setIsDeleteDialogOpen(false);
-    setDeleteProjectId(null);
-    toast({
-      title: 'Project deleted',
-      description: `"${project?.name}" has been deleted.`,
-    });
+    deleteMutation.mutate(deleteProjectId);
   };
 
   return (
@@ -305,8 +375,8 @@ export default function Dashboard() {
             <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateProject} disabled={isCreating} data-testid="button-confirm-create">
-              {isCreating ? (
+            <Button onClick={handleCreateProject} disabled={createMutation.isPending} data-testid="button-confirm-create">
+              {createMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Creating...
@@ -342,8 +412,15 @@ export default function Dashboard() {
             <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleConfirmRename} data-testid="button-confirm-rename">
-              Rename
+            <Button onClick={handleConfirmRename} disabled={renameMutation.isPending} data-testid="button-confirm-rename">
+              {renameMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Renaming...
+                </>
+              ) : (
+                'Rename'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -361,8 +438,15 @@ export default function Dashboard() {
             <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleConfirmDelete} data-testid="button-confirm-delete">
-              Delete
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleteMutation.isPending} data-testid="button-confirm-delete">
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

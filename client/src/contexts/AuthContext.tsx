@@ -1,72 +1,39 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
-import type { User } from '@/lib/types';
+import { createContext, useContext, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import type { User } from '@shared/schema';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, username: string, password: string) => Promise<void>;
-  logout: () => void;
   isLoading: boolean;
+  login: () => void;
+  logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // todo: remove mock functionality - replace with real API calls
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('codeorbit-user');
-    return stored ? JSON.parse(stored) : null;
+  const { data: user, isLoading } = useQuery<User>({
+    queryKey: ["/api/auth/user"],
+    retry: false,
   });
-  const [isLoading, setIsLoading] = useState(false);
 
-  const login = async (email: string, _password: string) => {
-    setIsLoading(true);
-    // todo: remove mock functionality - implement real API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    const mockUser: User = {
-      id: '1',
-      email,
-      username: email.split('@')[0],
-      role: 'user',
-      preferences: {
-        theme: 'dark',
-        editorFontSize: 14,
-        autoSave: true,
-      },
-    };
-    setUser(mockUser);
-    localStorage.setItem('codeorbit-user', JSON.stringify(mockUser));
-    setIsLoading(false);
-  };
-
-  const signup = async (email: string, username: string, _password: string) => {
-    setIsLoading(true);
-    // todo: remove mock functionality - implement real API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-    const mockUser: User = {
-      id: '1',
-      email,
-      username,
-      role: 'user',
-      preferences: {
-        theme: 'dark',
-        editorFontSize: 14,
-        autoSave: true,
-      },
-    };
-    setUser(mockUser);
-    localStorage.setItem('codeorbit-user', JSON.stringify(mockUser));
-    setIsLoading(false);
+  const login = () => {
+    window.location.href = '/api/login';
   };
 
   const logout = () => {
-    setUser(null);
-    localStorage.removeItem('codeorbit-user');
+    window.location.href = '/api/logout';
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, signup, logout, isLoading }}>
+    <AuthContext.Provider value={{ 
+      user: user ?? null, 
+      isAuthenticated: !!user, 
+      isLoading, 
+      login, 
+      logout 
+    }}>
       {children}
     </AuthContext.Provider>
   );
