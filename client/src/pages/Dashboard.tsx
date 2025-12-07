@@ -25,7 +25,8 @@ import PageTransition from '@/components/layout/PageTransition';
 import { useToast } from '@/hooks/use-toast';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import type { Project, FileNode } from '@shared/schema';
-import { SiNodedotjs, SiPython, SiReact, SiNextdotjs, SiHtml5, SiTypescript } from 'react-icons/si';
+import { SiNodedotjs, SiPython, SiReact, SiNextdotjs, SiHtml5, SiTypescript, SiGo, SiCplusplus, SiRust } from 'react-icons/si';
+import { Coffee } from 'lucide-react';
 
 interface ProjectTemplate {
   id: string;
@@ -606,6 +607,102 @@ button:hover {
     output.textContent = \`Button clicked \${count} time\${count !== 1 ? 's' : ''}!\`;
   });
 });`,
+        },
+      ],
+    },
+  },
+  {
+    id: 'go',
+    name: 'Go',
+    description: 'Fast, compiled language for system programming',
+    language: 'go',
+    icon: Code,
+    brandIcon: SiGo,
+    color: 'text-cyan-400',
+    files: {
+      type: 'folder',
+      name: 'root',
+      children: [
+        {
+          type: 'file',
+          name: 'main.go',
+          content: `package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello from NovaCode IDE!")
+}`,
+        },
+      ],
+    },
+  },
+  {
+    id: 'java',
+    name: 'Java',
+    description: 'Object-oriented programming with the JVM',
+    language: 'java',
+    icon: Coffee,
+    color: 'text-orange-600',
+    files: {
+      type: 'folder',
+      name: 'root',
+      children: [
+        {
+          type: 'file',
+          name: 'Main.java',
+          content: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from NovaCode IDE!");
+    }
+}`,
+        },
+      ],
+    },
+  },
+  {
+    id: 'cpp',
+    name: 'C++',
+    description: 'High-performance systems programming language',
+    language: 'cpp',
+    icon: Code,
+    brandIcon: SiCplusplus,
+    color: 'text-blue-600',
+    files: {
+      type: 'folder',
+      name: 'root',
+      children: [
+        {
+          type: 'file',
+          name: 'main.cpp',
+          content: `#include <iostream>
+
+int main() {
+    std::cout << "Hello from NovaCode IDE!" << std::endl;
+    return 0;
+}`,
+        },
+      ],
+    },
+  },
+  {
+    id: 'rust',
+    name: 'Rust',
+    description: 'Memory-safe systems programming language',
+    language: 'rust',
+    icon: Code,
+    brandIcon: SiRust,
+    color: 'text-orange-500',
+    files: {
+      type: 'folder',
+      name: 'root',
+      children: [
+        {
+          type: 'file',
+          name: 'main.rs',
+          content: `fn main() {
+    println!("Hello from NovaCode IDE!");
+}`,
         },
       ],
     },

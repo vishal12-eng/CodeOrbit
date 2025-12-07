@@ -9,6 +9,10 @@ import { pythonRunner } from "./python";
 import { reactRunner } from "./react";
 import { nextJsRunner } from "./nextjs";
 import { staticRunner } from "./static";
+import { goRunner } from "./go";
+import { javaRunner } from "./java";
+import { cppRunner } from "./cpp";
+import { rustRunner } from "./rust";
 
 export { ProjectType, type RunResult, type RunnerConfig, type StreamCallbacks } from "./types";
 export { detectProjectType, getEntryFile } from "./detector";
@@ -60,6 +64,14 @@ function getRunner(projectType: ProjectType) {
       return nextJsRunner;
     case ProjectType.STATIC_HTML:
       return staticRunner;
+    case ProjectType.GO:
+      return goRunner;
+    case ProjectType.JAVA:
+      return javaRunner;
+    case ProjectType.CPP:
+      return cppRunner;
+    case ProjectType.RUST:
+      return rustRunner;
     default:
       return nodeRunner;
   }
@@ -69,6 +81,10 @@ function getDefaultTimeout(projectType: ProjectType): number {
   switch (projectType) {
     case ProjectType.NODEJS:
     case ProjectType.PYTHON:
+    case ProjectType.GO:
+    case ProjectType.JAVA:
+    case ProjectType.CPP:
+    case ProjectType.RUST:
       return DEFAULT_TIMEOUTS.script;
     case ProjectType.REACT_CRA:
     case ProjectType.REACT_VITE:
@@ -164,6 +180,13 @@ export function mapLanguageToProjectType(language: string): ProjectType {
     "html": ProjectType.STATIC_HTML,
     "static": ProjectType.STATIC_HTML,
     "static-html": ProjectType.STATIC_HTML,
+    "go": ProjectType.GO,
+    "golang": ProjectType.GO,
+    "java": ProjectType.JAVA,
+    "cpp": ProjectType.CPP,
+    "c++": ProjectType.CPP,
+    "rust": ProjectType.RUST,
+    "rs": ProjectType.RUST,
   };
 
   return mapping[language.toLowerCase()] || ProjectType.NODEJS;

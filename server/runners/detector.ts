@@ -64,6 +64,22 @@ export function detectProjectType(files: FileNode): ProjectType {
     return ProjectType.PYTHON;
   }
   
+  if (hasFileWithExtension(files, ".go")) {
+    return ProjectType.GO;
+  }
+  
+  if (hasFileWithExtension(files, ".java")) {
+    return ProjectType.JAVA;
+  }
+  
+  if (hasFileWithExtension(files, ".cpp") || hasFileWithExtension(files, ".cc")) {
+    return ProjectType.CPP;
+  }
+  
+  if (hasFileWithExtension(files, ".rs")) {
+    return ProjectType.RUST;
+  }
+  
   const indexHtml = findFile(files, "index.html");
   if (indexHtml) {
     return ProjectType.STATIC_HTML;
@@ -91,6 +107,18 @@ export function getEntryFile(files: FileNode, projectType: ProjectType): string 
       if (appPy) return "app.py";
       return "main.py";
     }
+    
+    case ProjectType.GO:
+      return findFile(files, "main.go") ? "main.go" : "main.go";
+    
+    case ProjectType.JAVA:
+      return findFile(files, "Main.java") ? "Main.java" : "Main.java";
+    
+    case ProjectType.CPP:
+      return findFile(files, "main.cpp") ? "main.cpp" : "main.cpp";
+    
+    case ProjectType.RUST:
+      return findFile(files, "main.rs") ? "main.rs" : "main.rs";
     
     case ProjectType.STATIC_HTML:
       return "index.html";
