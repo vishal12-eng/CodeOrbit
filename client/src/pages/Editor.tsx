@@ -33,6 +33,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Logo from '@/components/layout/Logo';
 import ThemeToggle from '@/components/layout/ThemeToggle';
+import UserMenu from '@/components/layout/UserMenu';
 import FileTree from '@/components/editor/FileTree';
 import CodeTabs from '@/components/editor/CodeTabs';
 import CodeEditor from '@/components/editor/CodeEditor';
