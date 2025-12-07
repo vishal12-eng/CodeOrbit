@@ -3,6 +3,10 @@ import type { FileNode } from "@shared/schema";
 export enum ProjectType {
   NODEJS = "nodejs",
   PYTHON = "python",
+  JAVA = "java",
+  GO = "go",
+  CPP = "cpp",
+  RUST = "rust",
   REACT_CRA = "react-cra",
   REACT_VITE = "react-vite",
   NEXTJS = "nextjs",
