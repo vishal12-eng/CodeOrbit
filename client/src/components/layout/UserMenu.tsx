@@ -15,7 +15,8 @@ export default function UserMenu() {
 
   if (!user) return null;
 
-  const initials = user.username.slice(0, 2).toUpperCase();
+  const nameForInitials = user.email ?? user.firstName ?? 'User';
+  const initials = nameForInitials.slice(0, 2).toUpperCase();
 
   return (
     <DropdownMenu>
@@ -30,7 +31,7 @@ export default function UserMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <div className="px-2 py-2">
-          <p className="text-sm font-medium" data-testid="text-username">{user.username}</p>
+          <p className="text-sm font-medium" data-testid="text-username">{user.firstName && user.lastName ? `${user.firstName} ${user.lastName}` : user.email}</p>
           <p className="text-xs text-muted-foreground" data-testid="text-email">{user.email}</p>
         </div>
         <DropdownMenuSeparator />
