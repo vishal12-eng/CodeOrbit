@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Code2, Cloud, Play, FolderTree, Zap, Shield } from 'lucide-react';
+import { Code2, Cloud, Play, FolderTree, Zap, Shield, Sparkles, Brain, Terminal, GitBranch, Globe, Mic } from 'lucide-react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,33 +10,48 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const features = [
   {
+    icon: Brain,
+    title: 'AI-Powered Development',
+    description: 'Chat, edit code, and build entire features with GPT-5 AI assistance.',
+  },
+  {
     icon: Code2,
     title: 'Monaco Editor',
     description: 'VS Code-powered editing with syntax highlighting and IntelliSense.',
   },
   {
-    icon: Play,
-    title: 'Instant Run',
-    description: 'Execute your Node.js code instantly with a single click.',
+    icon: Terminal,
+    title: 'Integrated Terminal',
+    description: 'Full terminal access with command history and npm support.',
   },
   {
-    icon: FolderTree,
-    title: 'Multi-File Projects',
-    description: 'Organize your code in folders and files, just like a real IDE.',
+    icon: Globe,
+    title: 'Live Web Preview',
+    description: 'See your changes instantly with responsive device preview.',
+  },
+  {
+    icon: GitBranch,
+    title: 'Git Integration',
+    description: 'Built-in version control with AI-generated commit messages.',
+  },
+  {
+    icon: Mic,
+    title: 'Voice & Multimodal',
+    description: 'Speak your code or upload images for AI-powered design-to-code.',
   },
   {
     icon: Cloud,
-    title: 'Cloud Saved',
-    description: 'Your projects are automatically saved and synced to the cloud.',
+    title: 'Cloud Execution',
+    description: 'Run your code in secure cloud containers with one-click deploy.',
   },
   {
-    icon: Zap,
-    title: 'Fast & Light',
-    description: 'Minimal, blazing-fast interface designed for productivity.',
+    icon: Sparkles,
+    title: 'Builder Mode',
+    description: 'Plan, generate, and apply multi-file changes with AI agents.',
   },
   {
     icon: Shield,
-    title: 'Secure',
+    title: 'Secure & Private',
     description: 'Your code is private and securely stored in your account.',
   },
 ];
@@ -86,12 +101,12 @@ export default function Landing() {
               transition={{ duration: 0.5 }}
             >
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight">
-                Code in the cloud with{' '}
-                <span className="text-primary">CodeOrbit</span>
+                AI-Powered Cloud IDE{' '}
+                <span className="text-primary">NovaCode</span>
               </h1>
               <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-                A browser-based mini cloud IDE for students, indie devs, and beginners.
-                Write, run, and organize your JavaScript projects directly in your browser.
+                The ultimate cloud development environment combining AI assistance, 
+                instant execution, and seamless deployment. Build faster with the power of GPT-5.
               </p>
               <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
                 {isAuthenticated ? (
@@ -206,9 +221,14 @@ export default function Landing() {
       <footer className="px-6 py-8 border-t">
         <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <Logo size="sm" />
-          <p className="text-sm text-muted-foreground">
-            Built for developers who love to code.
-          </p>
+          <div className="flex items-center gap-4">
+            <Link href="/insights">
+              <Button variant="ghost" size="sm">Compare IDEs</Button>
+            </Link>
+            <p className="text-sm text-muted-foreground">
+              Built for developers who love to code.
+            </p>
+          </div>
         </div>
       </footer>
     </PageTransition>

@@ -1,4 +1,4 @@
-import { Orbit } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 interface LogoProps {
   size?: 'sm' | 'md' | 'lg';
@@ -21,12 +21,12 @@ export default function Logo({ size = 'md', showText = true }: LogoProps) {
   return (
     <div className="flex items-center gap-2">
       <div className="relative">
-        <Orbit className={`${iconSizes[size]} text-primary`} />
+        <Sparkles className={`${iconSizes[size]} text-primary`} />
         <div className="absolute inset-0 bg-primary/20 blur-lg rounded-full" />
       </div>
       {showText && (
         <span className={`font-semibold ${textSizes[size]}`}>
-          Code<span className="text-primary">Orbit</span>
+          Nova<span className="text-primary">Code</span>
         </span>
       )}
     </div>

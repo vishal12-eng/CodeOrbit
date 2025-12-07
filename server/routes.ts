@@ -7,12 +7,15 @@ import { spawn } from "child_process";
 import { mkdtemp, writeFile, rm } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
+import aiRoutes from "./ai/routes";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   await setupAuth(app);
+
+  app.use('/api/ai', aiRoutes);
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
