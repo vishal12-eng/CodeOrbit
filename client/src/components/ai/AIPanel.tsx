@@ -27,11 +27,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import SpeechInput from "@/components/editor/SpeechInput";
 import { useToast } from "@/hooks/use-toast";
+import { AIMessage } from "./AIMessage";
+import { AIHeader } from "./AIHeader";
+import { ActionList } from "./ActionList";
+import type { StructuredAIResponse, FileAction } from "@shared/aiSchema";
 
 interface Message {
   id: string;
@@ -40,6 +45,7 @@ interface Message {
   timestamp: Date;
   images?: string[];
   model?: string;
+  structuredResponse?: StructuredAIResponse;
 }
 
 interface AIPanelProps {
@@ -51,6 +57,7 @@ interface AIPanelProps {
 }
 
 type AIMode = "chat" | "edit" | "builder" | "debug" | "tests" | "docs";
+type PanelMode = "chat" | "builder";
 
 type ModelId = 
   | "gpt-4o"
@@ -105,9 +112,11 @@ export default function AIPanel({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<AIMode>("chat");
+  const [panelMode, setPanelMode] = useState<PanelMode>("chat");
   const [selectedModel, setSelectedModel] = useState<ModelId>("gpt-4o");
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  const [currentActionCount, setCurrentActionCount] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -153,6 +162,16 @@ export default function AIPanel({
     }
   }, [messages]);
 
+  useEffect(() => {
+    const totalActions = messages.reduce((count, msg) => {
+      if (msg.structuredResponse?.actions) {
+        return count + msg.structuredResponse.actions.length;
+      }
+      return count;
+    }, 0);
+    setCurrentActionCount(totalActions);
+  }, [messages]);
+
   const handleSend = async () => {
     if (!input.trim() && attachedImages.length === 0) return;
 
@@ -175,92 +194,139 @@ export default function AIPanel({
         ? `Current file: ${currentFile.path}\nLanguage: ${currentFile.language}\n\`\`\`${currentFile.language}\n${currentFile.content}\n\`\`\``
         : "";
 
-      switch (mode) {
-        case "chat":
-          response = await apiRequest("POST", "/api/ai/chat", {
-            messages: [
-              ...messages.map((m) => ({ role: m.role, content: m.content })),
-              { role: "user", content: input },
-            ],
-            systemPrompt: `You are NovaCode AI, a helpful coding assistant. ${fileContext ? `\n\n${fileContext}` : ""}${projectContext ? `\n\nProject context:\n${projectContext}` : ""}`,
-            model: selectedModel,
-          });
-          const chatData = await response.json();
-          addAssistantMessage(chatData.content, chatData.model);
-          break;
+      if (panelMode === "builder") {
+        const userMessages = messages
+          .filter((m) => m.role === "user")
+          .map((m) => ({ role: m.role, content: m.content }));
+        
+        response = await apiRequest("POST", "/api/ai/chat/structured", {
+          messages: [
+            ...userMessages,
+            { role: "user", content: input },
+          ],
+          context: `${fileContext ? `${fileContext}\n\n` : ""}${projectContext ? `Project context:\n${projectContext}` : ""}`,
+          model: selectedModel,
+          mode: "builder",
+        });
+        const structuredData = await response.json();
+        
+        const structuredResponse: StructuredAIResponse = {
+          id: Date.now().toString(),
+          sections: structuredData.sections?.map((s: any, i: number) => ({
+            id: `section-${i}`,
+            title: s.title || "",
+            content: s.content || "",
+            type: s.type || "text",
+            order: i,
+          })) || [],
+          actions: structuredData.fileActions?.map((a: any) => ({
+            type: a.type,
+            file: a.filePath || a.file,
+            description: a.description,
+            timestamp: new Date(),
+          })) || [],
+          metadata: {
+            model: structuredData.model || selectedModel,
+            timestamp: new Date(),
+            processingTime: structuredData.metadata?.processingTime,
+            totalTokens: structuredData.metadata?.totalTokens,
+          },
+          rawContent: structuredData.rawContent || "",
+        };
 
-        case "edit":
-          if (!currentFile) {
-            addAssistantMessage("Please open a file to edit.");
+        addAssistantMessage(
+          structuredData.rawContent || structuredData.sections?.map((s: any) => s.content).join("\n\n") || "",
+          structuredData.model,
+          structuredResponse
+        );
+      } else {
+        switch (mode) {
+          case "chat":
+            response = await apiRequest("POST", "/api/ai/chat", {
+              messages: [
+                ...messages.map((m) => ({ role: m.role, content: m.content })),
+                { role: "user", content: input },
+              ],
+              systemPrompt: `You are NovaCode AI, a helpful coding assistant. ${fileContext ? `\n\n${fileContext}` : ""}${projectContext ? `\n\nProject context:\n${projectContext}` : ""}`,
+              model: selectedModel,
+            });
+            const chatData = await response.json();
+            addAssistantMessage(chatData.content, chatData.model);
             break;
-          }
-          response = await apiRequest("POST", "/api/ai/edit", {
-            instruction: input,
-            code: currentFile.content,
-            language: currentFile.language,
-            context: projectContext,
-            model: selectedModel,
-          });
-          const editData = await response.json();
-          const editMessage = editData.diff 
-            ? `## Changes\n${editData.diff}\n\n${editData.explanation || ""}\n\n\`\`\`${currentFile.language}\n${editData.code}\n\`\`\``
-            : `Here's the edited code:\n\n\`\`\`${currentFile.language}\n${editData.code}\n\`\`\`\n\nClick "Apply" to update the file.`;
-          addAssistantMessage(editMessage, editData.model);
-          break;
 
-        case "builder":
-          response = await apiRequest("POST", "/api/ai/builder/plan", {
-            prompt: input,
-            projectStructure: projectContext,
-            model: selectedModel,
-          });
-          const planData = await response.json();
-          const planMessage = `## Build Plan\n\n**${planData.summary}**\n\nComplexity: ${planData.complexity || "medium"} | Est. Time: ${planData.estimatedTime || "5-10 min"}\n\n### Steps:\n${planData.steps?.map((s: any, i: number) => `${i + 1}. **${s.action}** - ${s.description}\n   Files: ${s.files?.join(", ") || "N/A"}`).join("\n") || "No steps generated"}`;
-          addAssistantMessage(planMessage);
-          break;
-
-        case "debug":
-          if (!currentFile) {
-            addAssistantMessage("Please open a file to debug.");
+          case "edit":
+            if (!currentFile) {
+              addAssistantMessage("Please open a file to edit.");
+              break;
+            }
+            response = await apiRequest("POST", "/api/ai/edit", {
+              instruction: input,
+              code: currentFile.content,
+              language: currentFile.language,
+              context: projectContext,
+              model: selectedModel,
+            });
+            const editData = await response.json();
+            const editMessage = editData.diff 
+              ? `## Changes\n${editData.diff}\n\n${editData.explanation || ""}\n\n\`\`\`${currentFile.language}\n${editData.code}\n\`\`\``
+              : `Here's the edited code:\n\n\`\`\`${currentFile.language}\n${editData.code}\n\`\`\`\n\nClick "Apply" to update the file.`;
+            addAssistantMessage(editMessage, editData.model);
             break;
-          }
-          response = await apiRequest("POST", "/api/ai/debug", {
-            code: currentFile.content,
-            error: input,
-            language: currentFile.language,
-            model: selectedModel,
-          });
-          const debugData = await response.json();
-          addAssistantMessage(`## Debug Analysis\n\n**Explanation:**\n${debugData.explanation}\n\n**Suggested Fix:**\n\`\`\`${currentFile.language}\n${debugData.fix}\n\`\`\``, debugData.model);
-          break;
 
-        case "tests":
-          if (!currentFile) {
-            addAssistantMessage("Please open a file to generate tests for.");
+          case "builder":
+            response = await apiRequest("POST", "/api/ai/builder/plan", {
+              prompt: input,
+              projectStructure: projectContext,
+              model: selectedModel,
+            });
+            const planData = await response.json();
+            const planMessage = `## Build Plan\n\n**${planData.summary}**\n\nComplexity: ${planData.complexity || "medium"} | Est. Time: ${planData.estimatedTime || "5-10 min"}\n\n### Steps:\n${planData.steps?.map((s: any, i: number) => `${i + 1}. **${s.action}** - ${s.description}\n   Files: ${s.files?.join(", ") || "N/A"}`).join("\n") || "No steps generated"}`;
+            addAssistantMessage(planMessage);
             break;
-          }
-          response = await apiRequest("POST", "/api/ai/generate-tests", {
-            code: currentFile.content,
-            language: currentFile.language,
-            model: selectedModel,
-          });
-          const testsData = await response.json();
-          addAssistantMessage(`## Generated Tests\n\n${testsData.tests}`, testsData.model);
-          break;
 
-        case "docs":
-          if (!currentFile) {
-            addAssistantMessage("Please open a file to document.");
+          case "debug":
+            if (!currentFile) {
+              addAssistantMessage("Please open a file to debug.");
+              break;
+            }
+            response = await apiRequest("POST", "/api/ai/debug", {
+              code: currentFile.content,
+              error: input,
+              language: currentFile.language,
+              model: selectedModel,
+            });
+            const debugData = await response.json();
+            addAssistantMessage(`## Debug Analysis\n\n**Explanation:**\n${debugData.explanation}\n\n**Suggested Fix:**\n\`\`\`${currentFile.language}\n${debugData.fix}\n\`\`\``, debugData.model);
             break;
-          }
-          response = await apiRequest("POST", "/api/ai/generate-docs", {
-            code: currentFile.content,
-            language: currentFile.language,
-            model: selectedModel,
-          });
-          const docsData = await response.json();
-          addAssistantMessage(`## Documentation\n\n${docsData.docs}`, docsData.model);
-          break;
+
+          case "tests":
+            if (!currentFile) {
+              addAssistantMessage("Please open a file to generate tests for.");
+              break;
+            }
+            response = await apiRequest("POST", "/api/ai/generate-tests", {
+              code: currentFile.content,
+              language: currentFile.language,
+              model: selectedModel,
+            });
+            const testsData = await response.json();
+            addAssistantMessage(`## Generated Tests\n\n${testsData.tests}`, testsData.model);
+            break;
+
+          case "docs":
+            if (!currentFile) {
+              addAssistantMessage("Please open a file to document.");
+              break;
+            }
+            response = await apiRequest("POST", "/api/ai/generate-docs", {
+              code: currentFile.content,
+              language: currentFile.language,
+              model: selectedModel,
+            });
+            const docsData = await response.json();
+            addAssistantMessage(`## Documentation\n\n${docsData.docs}`, docsData.model);
+            break;
+        }
       }
     } catch (error: any) {
       addAssistantMessage(`Error: ${error.message || "Something went wrong. Please try again."}`);
@@ -269,7 +335,7 @@ export default function AIPanel({
     }
   };
 
-  const addAssistantMessage = (content: string, model?: string) => {
+  const addAssistantMessage = (content: string, model?: string, structuredResponse?: StructuredAIResponse) => {
     setMessages((prev) => [
       ...prev,
       {
@@ -278,6 +344,7 @@ export default function AIPanel({
         content,
         timestamp: new Date(),
         model,
+        structuredResponse,
       },
     ]);
   };
@@ -296,6 +363,11 @@ export default function AIPanel({
     });
   };
 
+  const handleClearHistory = () => {
+    setMessages([]);
+    setCurrentActionCount(0);
+  };
+
   const getModelInfo = (modelId: ModelId): ModelConfig | undefined => {
     return availableModels.find(m => m.id === modelId);
   };
@@ -305,85 +377,78 @@ export default function AIPanel({
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <span className="font-medium text-sm">AI Assistant</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
-                <Bot className={cn("h-3.5 w-3.5", currentModel ? modelTypeColors[currentModel.type] : "")} />
-                <span className="hidden lg:inline">{currentModel?.name || "GPT-4o"}</span>
-                <ChevronDown className="h-3 w-3" />
+      <AIHeader
+        title="AI Assistant"
+        mode={panelMode}
+        selectedModel={selectedModel}
+        models={availableModels}
+        onModelChange={(id) => setSelectedModel(id as ModelId)}
+        actionCount={currentActionCount}
+        isStreaming={isLoading}
+        onClearHistory={handleClearHistory}
+      />
+
+      <div className="px-3 py-2 border-b bg-muted/20">
+        <Tabs value={panelMode} onValueChange={(v) => setPanelMode(v as PanelMode)}>
+          <TabsList className="h-8 w-full">
+            <TabsTrigger value="chat" className="flex-1 gap-1.5 text-xs" data-testid="tab-chat-mode">
+              <MessageSquare className="h-3.5 w-3.5" />
+              Chat
+            </TabsTrigger>
+            <TabsTrigger value="builder" className="flex-1 gap-1.5 text-xs" data-testid="tab-builder-mode">
+              <Wand2 className="h-3.5 w-3.5" />
+              Builder
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {panelMode === "chat" && (
+          <div className="flex items-center gap-1 mt-2 flex-wrap">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-6 gap-1 text-[10px]">
+                  <ModeIcon className={cn("h-3 w-3", modeConfig[mode].color)} />
+                  <span>{modeConfig[mode].label}</span>
+                  <ChevronDown className="h-2.5 w-2.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-40">
+                {Object.entries(modeConfig).map(([key, config]) => (
+                  <DropdownMenuItem
+                    key={key}
+                    onClick={() => setMode(key as AIMode)}
+                    className="gap-2 text-xs"
+                  >
+                    <config.icon className={cn("h-3.5 w-3.5", config.color)} />
+                    {config.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {onOpenBuilder && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 gap-1 text-[10px]"
+                onClick={onOpenBuilder}
+              >
+                <Zap className="h-3 w-3 text-amber-500" />
+                Full Builder
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="text-xs">Select Model</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {["openai", "anthropic", "gemini", "grok"].map((type) => {
-                const typeModels = availableModels.filter(m => m.type === type);
-                if (typeModels.length === 0) return null;
-                return (
-                  <div key={type}>
-                    <DropdownMenuLabel className={cn("text-[10px] uppercase tracking-wider", modelTypeColors[type])}>
-                      {type}
-                    </DropdownMenuLabel>
-                    {typeModels.map((model) => (
-                      <DropdownMenuItem
-                        key={model.id}
-                        onClick={() => setSelectedModel(model.id)}
-                        className={cn("gap-2 text-xs", model.available === false && "opacity-50")}
-                        disabled={model.available === false}
-                      >
-                        <Bot className={cn("h-3 w-3", modelTypeColors[model.type])} />
-                        {model.name}
-                        {model.id === selectedModel && (
-                          <Badge variant="secondary" className="ml-auto text-[9px]">Active</Badge>
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </div>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
-                <ModeIcon className={cn("h-3.5 w-3.5", modeConfig[mode].color)} />
-                <span className="hidden sm:inline">{modeConfig[mode].label}</span>
-                <ChevronDown className="h-3 w-3" />
+            )}
+            {onOpenOneShot && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 gap-1 text-[10px]"
+                onClick={onOpenOneShot}
+              >
+                <Sparkles className="h-3 w-3 text-pink-500" />
+                One-Shot
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              {Object.entries(modeConfig).map(([key, config]) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => setMode(key as AIMode)}
-                  className="gap-2 text-xs"
-                >
-                  <config.icon className={cn("h-3.5 w-3.5", config.color)} />
-                  {config.label}
-                </DropdownMenuItem>
-              ))}
-              <DropdownMenuSeparator />
-              {onOpenBuilder && (
-                <DropdownMenuItem onClick={onOpenBuilder} className="gap-2 text-xs">
-                  <Zap className="h-3.5 w-3.5 text-amber-500" />
-                  Builder Mode
-                </DropdownMenuItem>
-              )}
-              {onOpenOneShot && (
-                <DropdownMenuItem onClick={onOpenOneShot} className="gap-2 text-xs">
-                  <Sparkles className="h-3.5 w-3.5 text-pink-500" />
-                  One-Shot Creator
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       <ScrollArea className="flex-1" ref={scrollRef}>
@@ -393,51 +458,72 @@ export default function AIPanel({
               <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm font-medium">Start a conversation</p>
               <p className="text-xs mt-1 text-muted-foreground/70">
-                Mode: <span className={modeConfig[mode].color}>{modeConfig[mode].label}</span>
+                Mode: <span className={panelMode === "builder" ? "text-purple-500" : modeConfig[mode].color}>
+                  {panelMode === "builder" ? "Builder" : modeConfig[mode].label}
+                </span>
                 {" | "}
                 Model: <span className={currentModel ? modelTypeColors[currentModel.type] : ""}>{currentModel?.name || "GPT-4o"}</span>
               </p>
+              {panelMode === "builder" && (
+                <p className="text-xs mt-2 text-muted-foreground/50 max-w-[200px] mx-auto">
+                  Builder mode uses structured AI responses with file actions and organized sections
+                </p>
+              )}
             </div>
           )}
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={cn(
-                "p-3 rounded-lg text-sm",
-                message.role === "user"
-                  ? "bg-primary/10 ml-6"
-                  : "bg-muted/50 mr-6"
-              )}
-            >
-              {message.images && message.images.length > 0 && (
-                <div className="flex gap-2 mb-2 flex-wrap">
-                  {message.images.map((img, i) => (
-                    <img
-                      key={i}
-                      src={`data:image/jpeg;base64,${img}`}
-                      alt="Attached"
-                      className="h-14 w-14 object-cover rounded"
-                    />
-                  ))}
+            <div key={message.id}>
+              {message.role === "user" ? (
+                <div className="p-3 rounded-lg text-sm bg-primary/10 ml-6">
+                  {message.images && message.images.length > 0 && (
+                    <div className="flex gap-2 mb-2 flex-wrap">
+                      {message.images.map((img, i) => (
+                        <img
+                          key={i}
+                          src={`data:image/jpeg;base64,${img}`}
+                          alt="Attached"
+                          className="h-14 w-14 object-cover rounded"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-[10px] text-muted-foreground/60">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              ) : message.structuredResponse ? (
+                <AIMessage
+                  response={message.structuredResponse}
+                  isStreaming={false}
+                  showTypewriter={false}
+                  className="mr-6"
+                />
+              ) : (
+                <div className="p-3 rounded-lg text-sm bg-muted/50 mr-6">
+                  <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-[10px] text-muted-foreground/60">
+                      {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    {message.model && (
+                      <Badge variant="outline" className="text-[9px] h-4">
+                        {message.model}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               )}
-              <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
-              <div className="flex items-center gap-2 mt-1.5">
-                <span className="text-[10px] text-muted-foreground/60">
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-                {message.model && message.role === "assistant" && (
-                  <Badge variant="outline" className="text-[9px] h-4">
-                    {message.model}
-                  </Badge>
-                )}
-              </div>
             </div>
           ))}
           {isLoading && (
             <div className="flex items-center gap-2 text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-xs">Thinking with {currentModel?.name || "GPT-4o"}...</span>
+              <span className="text-xs">
+                {panelMode === "builder" ? "Building with" : "Thinking with"} {currentModel?.name || "GPT-4o"}...
+              </span>
             </div>
           )}
         </div>
@@ -467,7 +553,9 @@ export default function AIPanel({
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Ask AI (${modeConfig[mode].label})...`}
+          placeholder={panelMode === "builder" 
+            ? "Describe what you want to build..." 
+            : `Ask AI (${modeConfig[mode].label})...`}
           className="min-h-[56px] max-h-[120px] resize-none text-sm"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -519,7 +607,7 @@ export default function AIPanel({
             ) : (
               <Send className="h-3.5 w-3.5" />
             )}
-            Send
+            {panelMode === "builder" ? "Build" : "Send"}
           </Button>
         </div>
       </div>
