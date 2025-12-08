@@ -18,6 +18,7 @@ import {
   Undo2,
   Redo2,
   Search,
+  FileCode,
 } from 'lucide-react';
 import { Link, useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -35,6 +36,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -230,6 +240,8 @@ export default function Editor() {
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
   const [newItemPath, setNewItemPath] = useState('');
   const [newItemName, setNewItemName] = useState('');
+  const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
+  const [filePickerQuery, setFilePickerQuery] = useState('');
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingContentRef = useRef<{ path: string; content: string } | null>(null);
@@ -540,6 +552,60 @@ export default function Editor() {
       }
     };
   }, [project, projectId, selectedRunner, addLogEntry, toast]);
+
+  const handleImmediateSave = useCallback(() => {
+    if (!activeTab || !project) return;
+    
+    const currentTab = openTabs.find(t => t.path === activeTab);
+    if (!currentTab || !currentTab.isDirty) {
+      toast({
+        title: 'Already saved',
+        description: 'No changes to save.',
+      });
+      return;
+    }
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
+    }
+
+    setSaveStatus('saving');
+    const updatedFiles = updateFileInTree(project.files, activeTab, currentTab.content);
+    saveMutation.mutate(updatedFiles);
+  }, [activeTab, project, openTabs, saveMutation, toast]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const modKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (modKey && e.key === 's') {
+        e.preventDefault();
+        handleImmediateSave();
+      }
+
+      if (modKey && e.key === 'Enter') {
+        e.preventDefault();
+        handleRunWithStreaming();
+      }
+
+      if (modKey && e.key === 'f') {
+        e.preventDefault();
+        setIsSidebarOpen(true);
+        setLeftPanelTab('search');
+      }
+
+      if (modKey && e.key === 'p') {
+        e.preventDefault();
+        setIsFilePickerOpen(true);
+        setFilePickerQuery('');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleImmediateSave, handleRunWithStreaming]);
 
   const handleRun = async () => {
     if (!project) return;
@@ -1086,6 +1152,45 @@ export default function Editor() {
           onClose={() => setIsOneShotOpen(false)}
         />
       )}
+
+      <CommandDialog open={isFilePickerOpen} onOpenChange={setIsFilePickerOpen}>
+        <CommandInput
+          placeholder="Search files..."
+          value={filePickerQuery}
+          onValueChange={setFilePickerQuery}
+          data-testid="input-file-picker"
+        />
+        <CommandList>
+          <CommandEmpty>No files found.</CommandEmpty>
+          <CommandGroup heading="Files">
+            {projectFiles
+              .filter((file) =>
+                file.path.toLowerCase().includes(filePickerQuery.toLowerCase())
+              )
+              .slice(0, 20)
+              .map((file) => (
+                <CommandItem
+                  key={file.path}
+                  value={file.path}
+                  onSelect={() => {
+                    handleFileSelect(`/root/${file.path}`, file.content);
+                    setIsFilePickerOpen(false);
+                  }}
+                  data-testid={`file-picker-item-${file.path.replace(/[/.]/g, '-')}`}
+                >
+                  <FileCode className="mr-2 h-4 w-4" />
+                  <span>{file.path}</span>
+                </CommandItem>
+              ))}
+          </CommandGroup>
+        </CommandList>
+        <div className="border-t px-3 py-2 text-xs text-muted-foreground flex items-center justify-between gap-4">
+          <span>Quick open files</span>
+          <div className="flex items-center gap-2">
+            <CommandShortcut>Esc to close</CommandShortcut>
+          </div>
+        </div>
+      </CommandDialog>
     </PageTransition>
   );
 }
