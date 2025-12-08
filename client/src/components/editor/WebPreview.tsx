@@ -8,9 +8,18 @@ import {
   Tablet,
   Monitor,
   Loader2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 interface WebPreviewProps {
@@ -28,12 +37,34 @@ const deviceSizes = {
   mobile: { width: "375px", height: "100%" },
 };
 
+const ZOOM_LEVELS = [50, 75, 100, 125, 150, 200] as const;
+type ZoomLevel = typeof ZOOM_LEVELS[number];
+
 export default function WebPreview({ isOpen, onClose, previewUrl, projectId }: WebPreviewProps) {
   const [url, setUrl] = useState(previewUrl || "");
   const [isLoading, setIsLoading] = useState(false);
   const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>(100);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const handleZoomIn = () => {
+    const currentIndex = ZOOM_LEVELS.indexOf(zoomLevel);
+    if (currentIndex < ZOOM_LEVELS.length - 1) {
+      setZoomLevel(ZOOM_LEVELS[currentIndex + 1]);
+    }
+  };
+
+  const handleZoomOut = () => {
+    const currentIndex = ZOOM_LEVELS.indexOf(zoomLevel);
+    if (currentIndex > 0) {
+      setZoomLevel(ZOOM_LEVELS[currentIndex - 1]);
+    }
+  };
+
+  const handleResetZoom = () => {
+    setZoomLevel(100);
+  };
 
   useEffect(() => {
     if (previewUrl) {
@@ -186,6 +217,63 @@ export default function WebPreview({ isOpen, onClose, previewUrl, projectId }: W
             variant="ghost"
             size="icon"
             className="h-6 w-6"
+            onClick={handleZoomOut}
+            disabled={zoomLevel === ZOOM_LEVELS[0]}
+            data-testid="button-zoom-out"
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-xs min-w-[45px]"
+                data-testid="button-zoom-level"
+              >
+                {zoomLevel}%
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center">
+              {ZOOM_LEVELS.map((level) => (
+                <DropdownMenuItem
+                  key={level}
+                  onClick={() => setZoomLevel(level)}
+                  className={cn(level === zoomLevel && "bg-muted")}
+                  data-testid={`zoom-level-${level}`}
+                >
+                  {level}%
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={handleZoomIn}
+            disabled={zoomLevel === ZOOM_LEVELS[ZOOM_LEVELS.length - 1]}
+            data-testid="button-zoom-in"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+          {zoomLevel !== 100 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={handleResetZoom}
+              data-testid="button-zoom-reset"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 border-l border-border/50 pl-1.5 ml-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
             onClick={handleRefresh}
             disabled={isLoading}
             data-testid="button-refresh-preview"
@@ -229,6 +317,8 @@ export default function WebPreview({ isOpen, onClose, previewUrl, projectId }: W
             height: deviceSizes[deviceMode].height,
             maxWidth: "100%",
             maxHeight: "100%",
+            transform: `scale(${zoomLevel / 100})`,
+            transformOrigin: "top center",
           }}
         >
           <iframe
