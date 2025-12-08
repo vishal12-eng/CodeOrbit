@@ -1,8 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Send,
-  Mic,
-  MicOff,
   Image,
   Sparkles,
   Code,
@@ -32,6 +30,8 @@ import {
 import { cn } from "@/lib/utils";
 import { apiRequest } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
+import SpeechInput from "@/components/editor/SpeechInput";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   id: string;
@@ -106,12 +106,40 @@ export default function AIPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<AIMode>("chat");
   const [selectedModel, setSelectedModel] = useState<ModelId>("gpt-4o");
-  const [isRecording, setIsRecording] = useState(false);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const { toast } = useToast();
+
+  const handleSpeechTranscript = useCallback((text: string, isFinal: boolean) => {
+    if (isFinal) {
+      setInput((prev) => prev + (prev ? " " : "") + text);
+    }
+  }, []);
+
+  const handleAudioRecorded = useCallback(async (audioBase64: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/ai/transcribe", { audio: audioBase64 });
+      const data = await response.json();
+      setInput((prev) => prev + (prev ? " " : "") + data.text);
+    } catch (error) {
+      console.error("Transcription failed:", error);
+      toast({
+        title: "Voice Input Error",
+        description: "Failed to transcribe audio. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const handleSpeechError = useCallback((error: string) => {
+    toast({
+      title: "Voice Input Error",
+      description: error,
+      variant: "destructive",
+    });
+  }, [toast]);
 
   const { data: modelsData } = useQuery<{ models: ModelConfig[]; available: ModelConfig[] }>({
     queryKey: ["/api/ai/models"],
@@ -266,48 +294,6 @@ export default function AIPanel({
       };
       reader.readAsDataURL(file);
     });
-  };
-
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      audioChunksRef.current = [];
-
-      mediaRecorder.ondataavailable = (e) => {
-        audioChunksRef.current.push(e.data);
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const base64 = (e.target?.result as string).split(",")[1];
-          try {
-            const response = await apiRequest("POST", "/api/ai/transcribe", { audio: base64 });
-            const data = await response.json();
-            setInput((prev) => prev + (prev ? " " : "") + data.text);
-          } catch (error) {
-            console.error("Transcription failed:", error);
-          }
-        };
-        reader.readAsDataURL(audioBlob);
-        stream.getTracks().forEach((track) => track.stop());
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (error) {
-      console.error("Failed to start recording:", error);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
   };
 
   const getModelInfo = (modelId: ModelId): ModelConfig | undefined => {
@@ -510,15 +496,16 @@ export default function AIPanel({
             >
               <Image className="h-3.5 w-3.5" />
             </Button>
-            <Button
-              variant="ghost"
+            <SpeechInput
+              onTranscript={handleSpeechTranscript}
+              onListeningChange={setIsVoiceListening}
+              onAudioRecorded={handleAudioRecorded}
+              onError={handleSpeechError}
               size="icon"
-              className={cn("h-7 w-7", isRecording && "text-red-500 bg-red-500/10")}
-              onClick={isRecording ? stopRecording : startRecording}
-              data-testid="button-voice-input"
-            >
-              {isRecording ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-            </Button>
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={isLoading}
+            />
           </div>
           <Button
             onClick={handleSend}
