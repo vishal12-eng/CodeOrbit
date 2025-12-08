@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useImperativeHandle, forwardRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,14 +10,28 @@ interface CodeEditorProps {
   readOnly?: boolean;
 }
 
-export default function CodeEditor({
+export interface CodeEditorRef {
+  undo: () => void;
+  redo: () => void;
+}
+
+const CodeEditor = forwardRef<CodeEditorRef, CodeEditorProps>(function CodeEditor({
   value,
   onChange,
   language = 'javascript',
   readOnly = false,
-}: CodeEditorProps) {
+}, ref) {
   const { theme } = useTheme();
   const editorRef = useRef<any>(null);
+
+  useImperativeHandle(ref, () => ({
+    undo: () => {
+      editorRef.current?.trigger('keyboard', 'undo', null);
+    },
+    redo: () => {
+      editorRef.current?.trigger('keyboard', 'redo', null);
+    },
+  }), []);
 
   const handleEditorMount: OnMount = (editor) => {
     editorRef.current = editor;
@@ -64,4 +78,6 @@ export default function CodeEditor({
       }}
     />
   );
-}
+});
+
+export default CodeEditor;

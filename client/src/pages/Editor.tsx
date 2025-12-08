@@ -13,7 +13,10 @@ import {
   Globe,
   Terminal as TerminalIcon,
   Wand2,
+  WandSparkles,
   Rocket,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import { Link, useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -34,12 +37,17 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import Logo from '@/components/layout/Logo';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import UserMenu from '@/components/layout/UserMenu';
 import FileTree from '@/components/editor/FileTree';
 import CodeTabs from '@/components/editor/CodeTabs';
-import CodeEditor from '@/components/editor/CodeEditor';
+import CodeEditor, { type CodeEditorRef } from '@/components/editor/CodeEditor';
 import Console, { type LogEntry } from '@/components/editor/Console';
 import RunButton, { type RunnerType, RUNNER_OPTIONS } from '@/components/editor/RunButton';
 import SaveStatus from '@/components/editor/SaveStatus';
@@ -225,6 +233,7 @@ export default function Editor() {
   const pendingContentRef = useRef<{ path: string; content: string } | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const logIdCounter = useRef(0);
+  const codeEditorRef = useRef<CodeEditorRef>(null);
 
   const { data: project, isLoading: projectLoading, error: projectError } = useQuery<Project>({
     queryKey: ['/api/projects', projectId],
@@ -313,6 +322,44 @@ export default function Editor() {
       });
     },
   });
+
+  const formatMutation = useMutation({
+    mutationFn: async ({ code, language }: { code: string; language: string }) => {
+      const response = await apiRequest('POST', '/api/format', { code, language });
+      return response.json() as Promise<{ formatted?: string; error?: string; note?: string }>;
+    },
+    onSuccess: (data, variables) => {
+      if (data.formatted !== undefined && activeTab) {
+        setOpenTabs((tabs) =>
+          tabs.map((t) =>
+            t.path === activeTab ? { ...t, content: data.formatted!, isDirty: true } : t
+          )
+        );
+        setSaveStatus('unsaved');
+        
+        const toastMessage = data.note || 'Code formatted successfully';
+        toast({
+          title: 'Formatted',
+          description: toastMessage,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Format failed',
+        description: error.message || 'Failed to format code. Please try again.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const handleFormatCode = useCallback(() => {
+    const tab = openTabs.find((t) => t.path === activeTab);
+    if (!tab) return;
+    
+    const language = getFileLanguage(tab.name);
+    formatMutation.mutate({ code: tab.content, language });
+  }, [activeTab, openTabs, formatMutation]);
 
   useEffect(() => {
     if (projectError) {
@@ -682,6 +729,55 @@ export default function Editor() {
             </Badge>
           )}
           <SaveStatus status={saveStatus} />
+          <div className="h-4 w-px bg-border mx-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => codeEditorRef.current?.undo()}
+                disabled={!activeTabData}
+                data-testid="button-undo"
+              >
+                <Undo2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Undo (Ctrl+Z)</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => codeEditorRef.current?.redo()}
+                disabled={!activeTabData}
+                data-testid="button-redo"
+              >
+                <Redo2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Redo (Ctrl+Shift+Z)</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleFormatCode}
+                disabled={!activeTabData || formatMutation.isPending}
+                data-testid="button-format"
+              >
+                <WandSparkles className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Format Code</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -823,6 +919,7 @@ export default function Editor() {
                   <ResizablePanel defaultSize={isTerminalOpen ? 55 : 70} minSize={20}>
                     {activeTabData ? (
                       <CodeEditor
+                        ref={codeEditorRef}
                         value={activeTabData.content}
                         onChange={handleEditorChange}
                         language={getFileLanguage(activeTabData.name)}

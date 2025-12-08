@@ -10,7 +10,12 @@ import {
   debugCode,
   generateTests,
   generateDocs,
+  generateImage,
+  generateAudio,
   ChatMessage as OpenAIChatMessage,
+  ImageSize,
+  ImageStyle,
+  TTSVoice,
 } from "./openai";
 import {
   chatWithModel,
@@ -410,6 +415,51 @@ router.post("/generate-docs", async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("AI generate docs error:", error);
     res.status(500).json({ message: error.message || "Documentation generation failed" });
+  }
+});
+
+router.post("/generate-image", async (req: Request, res: Response) => {
+  try {
+    const { prompt, size, style } = req.body as {
+      prompt: string;
+      size?: ImageSize;
+      style?: ImageStyle;
+    };
+
+    if (!prompt) {
+      return res.status(400).json({ message: "Prompt required" });
+    }
+
+    const result = await generateImage({ prompt, size, style });
+    res.json({
+      url: result.url,
+      revisedPrompt: result.revisedPrompt,
+    });
+  } catch (error: any) {
+    console.error("AI generate image error:", error);
+    res.status(500).json({ message: error.message || "Image generation failed" });
+  }
+});
+
+router.post("/generate-audio", async (req: Request, res: Response) => {
+  try {
+    const { text, voice } = req.body as {
+      text: string;
+      voice?: TTSVoice;
+    };
+
+    if (!text) {
+      return res.status(400).json({ message: "Text required" });
+    }
+
+    const result = await generateAudio({ text, voice });
+    res.json({
+      audio: result.audio,
+      format: result.format,
+    });
+  } catch (error: any) {
+    console.error("AI generate audio error:", error);
+    res.status(500).json({ message: error.message || "Audio generation failed" });
   }
 });
 

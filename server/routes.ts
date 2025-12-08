@@ -13,12 +13,41 @@ import {
   type RunResult 
 } from "./runners";
 import * as git from "./git";
+import { formatCode } from "./formatter";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   app.use('/api/ai', aiRoutes);
+
+  app.post('/api/format', async (req: any, res) => {
+    try {
+      const { code, language } = req.body;
+      
+      if (typeof code !== 'string') {
+        return res.status(400).json({ error: "Invalid code: must be a string" });
+      }
+      
+      if (!language || typeof language !== 'string') {
+        return res.status(400).json({ error: "Invalid language: must be a non-empty string" });
+      }
+
+      const result = await formatCode(code, language);
+      
+      if (result.success) {
+        res.json({ 
+          formatted: result.formatted,
+          note: result.note 
+        });
+      } else {
+        res.status(400).json({ error: result.error });
+      }
+    } catch (error) {
+      console.error("Error formatting code:", error);
+      res.status(500).json({ error: "Failed to format code" });
+    }
+  });
 
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {

@@ -267,3 +267,67 @@ export async function generateDocs(code: string, language: string): Promise<stri
 
   return response.choices[0].message.content || "";
 }
+
+export type ImageSize = "1024x1024" | "1792x1024" | "1024x1792";
+export type ImageStyle = "vivid" | "natural";
+
+export interface GenerateImageRequest {
+  prompt: string;
+  size?: ImageSize;
+  style?: ImageStyle;
+}
+
+export interface GenerateImageResponse {
+  url: string;
+  revisedPrompt?: string;
+}
+
+export async function generateImage(request: GenerateImageRequest): Promise<GenerateImageResponse> {
+  const response = await getOpenAI().images.generate({
+    model: "dall-e-3",
+    prompt: request.prompt,
+    n: 1,
+    size: request.size || "1024x1024",
+    style: request.style || "vivid",
+  });
+
+  const imageData = response.data?.[0];
+  if (!imageData?.url) {
+    throw new Error("No image URL returned from DALL-E");
+  }
+
+  return {
+    url: imageData.url,
+    revisedPrompt: imageData.revised_prompt,
+  };
+}
+
+export type TTSVoice = "alloy" | "echo" | "fable" | "onyx" | "nova" | "shimmer";
+
+export interface GenerateAudioRequest {
+  text: string;
+  voice?: TTSVoice;
+}
+
+export interface GenerateAudioResponse {
+  audio: string;
+  format: string;
+}
+
+export async function generateAudio(request: GenerateAudioRequest): Promise<GenerateAudioResponse> {
+  const response = await getOpenAI().audio.speech.create({
+    model: "tts-1",
+    voice: request.voice || "alloy",
+    input: request.text,
+    response_format: "mp3",
+  });
+
+  const arrayBuffer = await response.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const base64Audio = buffer.toString("base64");
+
+  return {
+    audio: base64Audio,
+    format: "mp3",
+  };
+}
