@@ -263,6 +263,61 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/projects/:id/env', async (req: any, res) => {
+    try {
+      const envVars = await storage.getProjectEnvVars(req.params.id);
+      
+      if (envVars === undefined) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      res.json(envVars);
+    } catch (error) {
+      console.error("Error fetching env vars:", error);
+      res.status(500).json({ message: "Failed to fetch environment variables" });
+    }
+  });
+
+  app.post('/api/projects/:id/env', async (req: any, res) => {
+    try {
+      const { key, value } = req.body;
+      
+      if (!key || typeof key !== 'string') {
+        return res.status(400).json({ message: "Invalid key: must be a non-empty string" });
+      }
+      
+      if (value === undefined || typeof value !== 'string') {
+        return res.status(400).json({ message: "Invalid value: must be a string" });
+      }
+
+      const envVars = await storage.setProjectEnvVar(req.params.id, key, value);
+      
+      if (envVars === undefined) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      res.json(envVars);
+    } catch (error) {
+      console.error("Error setting env var:", error);
+      res.status(500).json({ message: "Failed to set environment variable" });
+    }
+  });
+
+  app.delete('/api/projects/:id/env/:key', async (req: any, res) => {
+    try {
+      const envVars = await storage.deleteProjectEnvVar(req.params.id, req.params.key);
+      
+      if (envVars === undefined) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      res.json(envVars);
+    } catch (error) {
+      console.error("Error deleting env var:", error);
+      res.status(500).json({ message: "Failed to delete environment variable" });
+    }
+  });
+
   return httpServer;
 }
 
@@ -274,6 +329,10 @@ function getProjectTypeLabel(projectType: ProjectType): string {
     [ProjectType.REACT_VITE]: "React (Vite)",
     [ProjectType.NEXTJS]: "Next.js",
     [ProjectType.STATIC_HTML]: "Static HTML",
+    [ProjectType.GO]: "Go",
+    [ProjectType.JAVA]: "Java",
+    [ProjectType.CPP]: "C++",
+    [ProjectType.RUST]: "Rust",
   };
   return labels[projectType] || "Unknown";
 }

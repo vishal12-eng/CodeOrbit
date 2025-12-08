@@ -6,6 +6,7 @@ import {
   type Project,
   type InsertProject,
   type FileNode,
+  type EnvVars,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc } from "drizzle-orm";
@@ -19,6 +20,10 @@ export interface IStorage {
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: string, updates: Partial<{ name: string; files: FileNode }>): Promise<Project | undefined>;
   deleteProject(id: string): Promise<boolean>;
+
+  getProjectEnvVars(projectId: string): Promise<EnvVars | undefined>;
+  setProjectEnvVar(projectId: string, key: string, value: string): Promise<EnvVars | undefined>;
+  deleteProjectEnvVar(projectId: string, key: string): Promise<EnvVars | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -75,6 +80,43 @@ export class DatabaseStorage implements IStorage {
   async deleteProject(id: string): Promise<boolean> {
     const result = await db.delete(projects).where(eq(projects.id, id)).returning();
     return result.length > 0;
+  }
+
+  async getProjectEnvVars(projectId: string): Promise<EnvVars | undefined> {
+    const [project] = await db.select({ envVars: projects.envVars }).from(projects).where(eq(projects.id, projectId));
+    return project?.envVars ?? {};
+  }
+
+  async setProjectEnvVar(projectId: string, key: string, value: string): Promise<EnvVars | undefined> {
+    const [project] = await db.select({ envVars: projects.envVars }).from(projects).where(eq(projects.id, projectId));
+    if (!project) return undefined;
+
+    const currentEnvVars = project.envVars ?? {};
+    const updatedEnvVars = { ...currentEnvVars, [key]: value };
+
+    const [updated] = await db
+      .update(projects)
+      .set({ envVars: updatedEnvVars, updatedAt: new Date() })
+      .where(eq(projects.id, projectId))
+      .returning({ envVars: projects.envVars });
+    
+    return updated?.envVars ?? undefined;
+  }
+
+  async deleteProjectEnvVar(projectId: string, key: string): Promise<EnvVars | undefined> {
+    const [project] = await db.select({ envVars: projects.envVars }).from(projects).where(eq(projects.id, projectId));
+    if (!project) return undefined;
+
+    const currentEnvVars = project.envVars ?? {};
+    const { [key]: _, ...updatedEnvVars } = currentEnvVars;
+
+    const [updated] = await db
+      .update(projects)
+      .set({ envVars: updatedEnvVars, updatedAt: new Date() })
+      .where(eq(projects.id, projectId))
+      .returning({ envVars: projects.envVars });
+    
+    return updated?.envVars ?? undefined;
   }
 }
 

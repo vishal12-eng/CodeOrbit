@@ -40,21 +40,23 @@ export interface FileNode {
   children?: FileNode[];
 }
 
+export type EnvVars = Record<string, string>;
+
 export const projects = pgTable("projects", {
   id: varchar("id", { length: 255 }).primaryKey().default(sql`gen_random_uuid()`),
   ownerId: varchar("owner_id", { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
   name: text("name").notNull(),
   language: text("language").notNull().default("node-js"),
   files: jsonb("files").$type<FileNode>().notNull(),
+  envVars: jsonb("env_vars").$type<EnvVars>().default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
+export const insertProjectSchema = z.object({
+  ownerId: z.string(),
+  name: z.string(),
+  language: z.string().default("node-js"),
   files: fileNodeSchema,
 });
 

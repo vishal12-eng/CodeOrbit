@@ -1,7 +1,7 @@
 import { generateJSONWithModel, generateWithModel, ModelId } from "./models";
 import { FileNode } from "../../shared/schema";
 
-export type ProjectType = "react" | "nextjs" | "nodejs" | "python" | "static";
+export type ProjectType = "react" | "nextjs" | "nodejs" | "python" | "static" | "go" | "java" | "cpp" | "rust";
 
 export interface ProjectTemplate {
   type: ProjectType;
@@ -40,6 +40,30 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     name: "Static Website",
     description: "Simple HTML/CSS/JS website",
     defaultFiles: ["index.html", "styles.css", "script.js"],
+  },
+  {
+    type: "go",
+    name: "Go App",
+    description: "Go application with modules",
+    defaultFiles: ["main.go", "go.mod"],
+  },
+  {
+    type: "java",
+    name: "Java App",
+    description: "Java application with Maven",
+    defaultFiles: ["Main.java", "pom.xml"],
+  },
+  {
+    type: "cpp",
+    name: "C++ App",
+    description: "C++ application with Makefile",
+    defaultFiles: ["main.cpp", "Makefile"],
+  },
+  {
+    type: "rust",
+    name: "Rust App",
+    description: "Rust application with Cargo",
+    defaultFiles: ["src/main.rs", "Cargo.toml"],
   },
 ];
 
@@ -182,6 +206,39 @@ function getProjectGuidelines(type: ProjectType): string {
 - Include proper meta tags
 - Use CSS variables for theming`;
     
+    case "go":
+      return `- Use Go 1.21+ with modules
+- Entry file must be main.go with package main
+- Include go.mod with module name
+- Use standard library where possible
+- Include proper error handling
+- Follow Go idioms and conventions
+- Use goroutines for concurrency if needed`;
+    
+    case "java":
+      return `- Entry file must be Main.java with public class Main
+- Include pom.xml for Maven build
+- Use Java 17+ features
+- Include proper package structure
+- Add proper exception handling
+- Follow Java naming conventions`;
+    
+    case "cpp":
+      return `- Entry file must be main.cpp with int main()
+- Include Makefile for building
+- Use C++17 or later features
+- Include proper header guards
+- Use modern C++ practices (smart pointers, RAII)
+- Add proper error handling`;
+    
+    case "rust":
+      return `- Use Cargo for project management
+- Entry file is src/main.rs with fn main()
+- Include Cargo.toml with package info
+- Use Rust 2021 edition
+- Follow Rust idioms (Result, Option)
+- Use proper error handling with Result types`;
+    
     default:
       return "";
   }
@@ -199,6 +256,14 @@ function getDefaultSetupInstructions(type: ProjectType): string[] {
       return ["pip install -r requirements.txt", "python app.py"];
     case "static":
       return ["Open index.html in a browser"];
+    case "go":
+      return ["go run main.go"];
+    case "java":
+      return ["javac Main.java", "java Main"];
+    case "cpp":
+      return ["make", "./app"];
+    case "rust":
+      return ["cargo run"];
     default:
       return [];
   }
