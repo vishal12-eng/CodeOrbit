@@ -1,8 +1,50 @@
-# CodeOrbit
+# NovaCode IDE
 
 ## Overview
 
-CodeOrbit is a browser-based cloud IDE designed for students, indie developers, and beginners. It provides a streamlined coding environment with Monaco editor integration, instant Node.js code execution, and cloud-based project storage. The application emphasizes simplicity and productivity with a clean, modern interface inspired by professional development tools like Replit, CodeSandbox, and VS Code.
+NovaCode IDE is a comprehensive AI-powered cloud development environment comparable to Replit, Cursor AI, and Bolt. It provides a browser-based coding environment with Monaco editor integration, multi-language support, real-time code execution with streaming output, integrated AI assistance with multiple models (GPT-4, Claude, Gemini, Grok), and WebSocket-based real-time features. The application emphasizes simplicity and productivity with a clean, modern interface.
+
+## Recent Changes (December 2025)
+
+### Phase 1: WebSocket Streaming
+- Created `server/websocket.ts` with real-time streaming for terminal, runner logs, AI output, and console
+- Project-based connection grouping with heartbeat mechanism
+
+### Phase 2: Multi-Language Templates
+- Added Go, Java, C++, and Rust project templates to `server/ai/oneshot.ts`
+- Each template includes proper entry files, build configs, and guidelines
+
+### Phase 3: Environment Variables System
+- Added `envVars` field to projects schema
+- API endpoints: GET/POST/DELETE for `/api/projects/:id/env`
+- Created `EnvVarsPanel.tsx` frontend component
+
+### Phase 4: Authentication
+- Removed demo-user hardcoding
+- Proper Replit OIDC authentication with session-based auth
+
+### Phase 5: AI Model Integrations
+- Integrated Gemini (Google Generative AI SDK)
+- Integrated Grok/xAI (OpenAI-compatible API)
+- Both support streaming and JSON generation
+
+### Phase 6: Git Backend
+- Created `server/git.ts` with simple-git integration
+- Full Git API: init, status, add, commit, log, branches, checkout, branch
+
+### Phase 7: Image & Audio Generation
+- Added DALL-E 3 image generation endpoint
+- Added OpenAI TTS audio generation endpoint
+- Created `ImageAudioGenerator.tsx` component
+
+### Phase 8: Undo/Redo
+- Exposed Monaco undo/redo via CodeEditor ref
+- Added Undo/Redo buttons to editor toolbar
+
+### Phase 9: Code Formatter
+- Created `server/formatter.ts` with Prettier integration
+- Added `/api/format` endpoint
+- Format button in editor toolbar
 
 ## User Preferences
 
