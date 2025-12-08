@@ -219,12 +219,12 @@ export default function AIPanel({
             type: s.type || "text",
             order: i,
           })) || [],
-          actions: structuredData.fileActions?.map((a: any) => ({
+          actions: (structuredData.actions || structuredData.fileActions || []).map((a: any) => ({
             type: a.type,
             file: a.filePath || a.file,
             description: a.description,
             timestamp: new Date(),
-          })) || [],
+          })),
           metadata: {
             model: structuredData.model || selectedModel,
             timestamp: new Date(),
@@ -242,16 +242,43 @@ export default function AIPanel({
       } else {
         switch (mode) {
           case "chat":
-            response = await apiRequest("POST", "/api/ai/chat", {
+            response = await apiRequest("POST", "/api/ai/chat/structured", {
               messages: [
                 ...messages.map((m) => ({ role: m.role, content: m.content })),
                 { role: "user", content: input },
               ],
-              systemPrompt: `You are NovaCode AI, a helpful coding assistant. ${fileContext ? `\n\n${fileContext}` : ""}${projectContext ? `\n\nProject context:\n${projectContext}` : ""}`,
+              context: `${fileContext ? `${fileContext}\n\n` : ""}${projectContext ? `Project context:\n${projectContext}` : ""}`,
               model: selectedModel,
+              mode: "chat",
             });
-            const chatData = await response.json();
-            addAssistantMessage(chatData.content, chatData.model);
+            const chatStructured = await response.json();
+            const chatResponse: StructuredAIResponse = {
+              id: Date.now().toString(),
+              sections: chatStructured.sections?.map((s: any, i: number) => ({
+                id: `section-${i}`,
+                title: s.title || "",
+                content: s.content || "",
+                type: s.type || "text",
+                order: i,
+              })) || [],
+              actions: chatStructured.actions?.map((a: any) => ({
+                type: a.type,
+                file: a.file,
+                description: a.description,
+                timestamp: new Date(),
+              })) || [],
+              metadata: {
+                model: chatStructured.model || selectedModel,
+                timestamp: new Date(),
+                processingTime: chatStructured.metadata?.processingTime,
+              },
+              rawContent: chatStructured.rawContent || "",
+            };
+            addAssistantMessage(
+              chatStructured.rawContent || chatStructured.sections?.map((s: any) => s.content).join("\n\n") || "",
+              chatStructured.model,
+              chatResponse
+            );
             break;
 
           case "edit":

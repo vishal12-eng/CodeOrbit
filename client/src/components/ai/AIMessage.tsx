@@ -13,10 +13,9 @@ import {
   MessageSquare,
   ChevronDown,
   ChevronRight,
-  Bot,
+  MoreHorizontal,
 } from "lucide-react";
 import type { AIResponseSection, StructuredAIResponse } from "@shared/aiSchema";
-import { FileActionChip } from "./FileActionChip";
 import { ActionList } from "./ActionList";
 import {
   Collapsible,
@@ -239,7 +238,7 @@ export function AIMessage({
 
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
-      const next = new Set(prev);
+      const next = new Set(Array.from(prev));
       if (next.has(sectionId)) {
         next.delete(sectionId);
       } else {
@@ -256,66 +255,49 @@ export function AIMessage({
   return (
     <div 
       className={cn(
-        "rounded-lg border bg-card p-4 shadow-sm animate-in fade-in-50 duration-300",
+        "animate-in fade-in-50 duration-300",
         className
       )}
       data-testid="ai-message"
     >
-      <div className="flex items-center gap-2 mb-3 pb-2 border-b">
-        <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10">
-          <Bot className="h-3.5 w-3.5 text-primary" />
+      <div className="flex items-start gap-3">
+        <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-sm">bolt</span>
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground ml-auto cursor-pointer hover:text-foreground transition-colors" />
+          </div>
+
+          <div className="space-y-0">
+            {response.sections.map((section, index) => (
+              <AISection
+                key={section.id}
+                section={section}
+                isExpanded={expandedSections.has(section.id)}
+                onToggle={() => toggleSection(section.id)}
+                showTypewriter={showTypewriter && index === currentTypingSection}
+                typewriterSpeed={typewriterSpeed}
+                onTypewriterComplete={
+                  index === currentTypingSection ? handleSectionComplete : undefined
+                }
+              />
+            ))}
+          </div>
+
+          {response.actions.length > 0 && (
+            <ActionList 
+              actions={response.actions} 
+              isLoading={isStreaming}
+            />
+          )}
+
+          <div className="text-[11px] text-muted-foreground/50 mt-2">
+            {response.metadata.timestamp.toLocaleTimeString([], { 
+              hour: "2-digit", 
+              minute: "2-digit",
+              hour12: true,
+            }).toLowerCase()}
+          </div>
         </div>
-        <span className="text-xs font-medium text-muted-foreground">
-          {response.metadata.model}
-        </span>
-        {isStreaming && (
-          <Badge variant="secondary" className="text-[10px] animate-pulse">
-            Generating...
-          </Badge>
-        )}
-        {response.actions.length > 0 && (
-          <Badge variant="outline" className="text-[10px] ml-auto">
-            {response.actions.length} action{response.actions.length !== 1 ? "s" : ""}
-          </Badge>
-        )}
-      </div>
-
-      {response.actions.length > 0 && (
-        <ActionList 
-          actions={response.actions} 
-          className="mb-3"
-        />
-      )}
-
-      <div className="space-y-1">
-        {response.sections.map((section, index) => (
-          <AISection
-            key={section.id}
-            section={section}
-            isExpanded={expandedSections.has(section.id)}
-            onToggle={() => toggleSection(section.id)}
-            showTypewriter={showTypewriter && index === currentTypingSection}
-            typewriterSpeed={typewriterSpeed}
-            onTypewriterComplete={
-              index === currentTypingSection ? handleSectionComplete : undefined
-            }
-          />
-        ))}
-      </div>
-
-      <div className="mt-3 pt-2 border-t flex items-center gap-2 text-[10px] text-muted-foreground/60">
-        <span>
-          {response.metadata.timestamp.toLocaleTimeString([], { 
-            hour: "2-digit", 
-            minute: "2-digit" 
-          })}
-        </span>
-        {response.metadata.totalTokens && (
-          <span>• {response.metadata.totalTokens} tokens</span>
-        )}
-        {response.metadata.processingTime && (
-          <span>• {(response.metadata.processingTime / 1000).toFixed(1)}s</span>
-        )}
       </div>
     </div>
   );

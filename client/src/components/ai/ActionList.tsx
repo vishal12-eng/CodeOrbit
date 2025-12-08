@@ -1,6 +1,21 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Eye, Pencil, Edit3, Plus, Trash2, Hammer, Play, Download, FlaskConical, Zap } from "lucide-react";
+import { 
+  ChevronDown, 
+  ChevronUp,
+  Eye, 
+  Pencil, 
+  Edit3, 
+  Plus, 
+  Trash2, 
+  Hammer, 
+  Play, 
+  Download, 
+  FlaskConical,
+  MessageCircle,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -33,12 +48,12 @@ const actionLabels: Record<FileActionType, string> = {
 };
 
 const actionColors: Record<FileActionType, string> = {
-  read: "text-purple-400",
-  write: "text-orange-400",
-  edit: "text-orange-400",
-  create: "text-blue-400",
+  read: "text-neutral-400",
+  write: "text-neutral-400",
+  edit: "text-neutral-400",
+  create: "text-neutral-400",
   delete: "text-red-400",
-  build: "text-yellow-400",
+  build: "text-neutral-400",
   run: "text-green-400",
   install: "text-cyan-400",
   test: "text-indigo-400",
@@ -47,87 +62,85 @@ const actionColors: Record<FileActionType, string> = {
 interface ActionListProps {
   actions: FileAction[];
   defaultExpanded?: boolean;
-  maxPreview?: number;
+  isLoading?: boolean;
   className?: string;
 }
 
 export function ActionList({
   actions,
-  defaultExpanded = true,
-  maxPreview = 5,
+  defaultExpanded = false,
+  isLoading = false,
   className,
 }: ActionListProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
-  if (actions.length === 0) {
+  if (actions.length === 0 && !isLoading) {
     return null;
   }
-
-  const displayedActions = isExpanded ? actions : actions.slice(0, maxPreview);
-  const hasMore = !isExpanded && actions.length > maxPreview;
 
   return (
     <Collapsible 
       open={isExpanded} 
       onOpenChange={setIsExpanded}
-      className={cn("rounded-lg border border-primary/20 bg-primary/5 overflow-hidden", className)}
+      className={cn("my-4", className)}
     >
       <CollapsibleTrigger 
-        className="flex items-center gap-3 w-full px-4 py-3 hover-elevate transition-all group cursor-pointer"
+        className="flex items-center gap-2 w-full py-2 cursor-pointer group"
         data-testid="button-toggle-actions"
       >
-        <Zap className="h-5 w-5 text-amber-400 flex-shrink-0" />
-        <div className="flex items-baseline gap-2 flex-1">
-          <span className="font-semibold text-sm">
-            {actions.length} action{actions.length !== 1 ? "s" : ""} taken
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {isExpanded ? "View less" : "View more"}
-          </span>
-        </div>
-        {isExpanded ? (
-          <ChevronDown className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+        {isLoading ? (
+          <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
         ) : (
-          <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+          <MessageCircle className="h-4 w-4 text-muted-foreground" />
+        )}
+        <span className="text-sm text-muted-foreground font-medium">
+          {isLoading ? "Working..." : `${actions.length} action${actions.length !== 1 ? "s" : ""} taken`}
+        </span>
+        {isExpanded ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground ml-auto" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground ml-auto" />
         )}
       </CollapsibleTrigger>
 
-      {(isExpanded || !isExpanded) && (
-        <CollapsibleContent>
-          <div className="border-t border-primary/20 divide-y divide-primary/10">
-            {displayedActions.map((action, index) => {
-              const Icon = actionIcons[action.type];
-              const label = actionLabels[action.type];
-              const color = actionColors[action.type];
+      <CollapsibleContent className="overflow-hidden">
+        <div className="space-y-1 pt-1">
+          {actions.map((action, index) => {
+            const Icon = actionIcons[action.type];
+            const label = actionLabels[action.type];
+            const color = actionColors[action.type];
 
+            if (action.type === "build" && !action.file) {
               return (
                 <div 
-                  key={`${action.type}-${action.file}-${index}`}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-primary/10 transition-colors group"
+                  key={`${action.type}-${index}`}
+                  className="flex items-center gap-2 py-1.5"
                 >
-                  <Icon className={cn("h-4 w-4 flex-shrink-0", color)} />
-                  <span className="text-sm font-medium text-foreground/70 group-hover:text-foreground min-w-[70px]">
-                    {label}
+                  <CheckCircle2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">
+                    {action.description || "Built the project to verify everything works"}
                   </span>
-                  <code className="text-xs font-mono text-muted-foreground group-hover:text-foreground/80 break-all flex-1 px-2 py-1 rounded bg-background/50">
-                    {action.file}
-                  </code>
-                  {action.description && (
-                    <div className="text-xs text-muted-foreground hidden group-hover:block absolute right-4">
-                      {action.description}
-                    </div>
-                  )}
                 </div>
               );
-            })}
-            {hasMore && (
-              <div className="px-4 py-2 text-xs text-muted-foreground/60 text-center">
-                +{actions.length - maxPreview} more actions...
+            }
+
+            return (
+              <div 
+                key={`${action.type}-${action.file}-${index}`}
+                className="flex items-center gap-2 py-1.5"
+              >
+                <Icon className={cn("h-4 w-4 flex-shrink-0", color)} />
+                <span className="text-sm text-muted-foreground min-w-[55px]">
+                  {label}
+                </span>
+                <code className="text-xs font-mono px-2 py-0.5 rounded bg-muted/50 text-foreground/80 truncate max-w-[280px]">
+                  {action.file}
+                </code>
               </div>
-            )}
-          </div>
-        </CollapsibleContent>
-      )}
+            );
+          })}
+        </div>
+      </CollapsibleContent>
     </Collapsible>
   );
 }
