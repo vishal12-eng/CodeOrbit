@@ -1,15 +1,20 @@
 import {
   users,
   projects,
+  apiKeys,
   type User,
   type UpsertUser,
   type Project,
   type InsertProject,
   type FileNode,
   type EnvVars,
+  type ApiKey,
+  type ApiKeyPublic,
+  type ApiKeyProvider,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
+import crypto from "crypto";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;

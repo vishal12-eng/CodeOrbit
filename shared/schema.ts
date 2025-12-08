@@ -72,3 +72,28 @@ export const sessions = pgTable(
   },
   (table) => [index("IDX_session_expire").on(table.expire)],
 );
+
+export const apiKeyProviderEnum = z.enum(['openai', 'anthropic', 'google', 'custom']);
+export type ApiKeyProvider = z.infer<typeof apiKeyProviderEnum>;
+
+export const apiKeys = pgTable("api_keys", {
+  id: varchar("id", { length: 255 }).primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: text("provider").notNull(),
+  name: text("name").notNull(),
+  keyPreview: text("key_preview").notNull(),
+  encryptedKey: text("encrypted_key").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertApiKeySchema = z.object({
+  userId: z.string(),
+  provider: apiKeyProviderEnum,
+  name: z.string().min(1).max(100),
+  apiKey: z.string().min(10),
+});
+
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type ApiKey = typeof apiKeys.$inferSelect;
+
+export type ApiKeyPublic = Omit<ApiKey, 'encryptedKey'>;
