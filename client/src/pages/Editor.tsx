@@ -17,6 +17,7 @@ import {
   Rocket,
   Undo2,
   Redo2,
+  Search,
 } from 'lucide-react';
 import { Link, useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -54,6 +55,7 @@ import SaveStatus from '@/components/editor/SaveStatus';
 import Terminal, { TerminalToggle } from '@/components/editor/Terminal';
 import WebPreview from '@/components/editor/WebPreview';
 import GitPanel from '@/components/editor/GitPanel';
+import SearchPanel from '@/components/editor/SearchPanel';
 import AIPanel from '@/components/ai/AIPanel';
 import BuilderMode from '@/components/ai/BuilderMode';
 import OneShotCreator from '@/components/ai/OneShotCreator';
@@ -87,7 +89,7 @@ interface DetectedType {
   projectTypeLabel: string;
 }
 
-type LeftPanelTab = 'files' | 'git' | 'settings';
+type LeftPanelTab = 'files' | 'git' | 'search' | 'settings';
 
 function deepCloneFileNode(node: FileNodeType): FileNodeType {
   return JSON.parse(JSON.stringify(node));
@@ -174,7 +176,7 @@ function flattenFiles(node: FileNodeType, path = ''): { path: string; content: s
   if (node.type === 'file' && node.content !== undefined) {
     files.push({ path: path + node.name, content: node.content });
   } else if (node.type === 'folder' && node.children) {
-    const folderPath = path ? path + node.name + '/' : '';
+    const folderPath = node.name === 'root' ? path : path + node.name + '/';
     for (const child of node.children) {
       files.push(...flattenFiles(child, folderPath));
     }
@@ -845,10 +847,14 @@ export default function Editor() {
                       onValueChange={(v) => setLeftPanelTab(v as LeftPanelTab)}
                       className="flex-1"
                     >
-                      <TabsList className="h-8 w-full grid grid-cols-3 bg-muted/50">
+                      <TabsList className="h-8 w-full grid grid-cols-4 bg-muted/50">
                         <TabsTrigger value="files" className="text-xs gap-1 px-1.5 data-[state=active]:bg-background">
                           <FolderTree className="h-3.5 w-3.5" />
                           <span className="hidden lg:inline">Files</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="search" className="text-xs gap-1 px-1.5 data-[state=active]:bg-background" data-testid="tab-search">
+                          <Search className="h-3.5 w-3.5" />
+                          <span className="hidden lg:inline">Search</span>
                         </TabsTrigger>
                         <TabsTrigger value="git" className="text-xs gap-1 px-1.5 data-[state=active]:bg-background">
                           <GitBranch className="h-3.5 w-3.5" />
@@ -884,6 +890,29 @@ export default function Editor() {
                     )}
                     {leftPanelTab === 'git' && (
                       <GitPanel projectId={projectId} />
+                    )}
+                    {leftPanelTab === 'search' && (
+                      <SearchPanel
+                        files={projectFiles}
+                        onResultClick={(path, lineNumber) => {
+                          const file = projectFiles.find(f => f.path === path);
+                          if (file) {
+                            handleFileSelect('/' + path, file.content);
+                          }
+                        }}
+                        onReplaceAll={(replacements) => {
+                          if (!project) return;
+                          let updatedFiles = project.files;
+                          for (const r of replacements) {
+                            updatedFiles = updateFileInTree(updatedFiles, '/' + r.path, r.newContent);
+                          }
+                          saveMutation.mutate(updatedFiles);
+                          toast({
+                            title: 'Replace complete',
+                            description: `Replaced in ${replacements.length} file(s).`,
+                          });
+                        }}
+                      />
                     )}
                     {leftPanelTab === 'settings' && (
                       <div className="p-3 space-y-4">
