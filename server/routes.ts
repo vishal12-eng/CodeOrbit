@@ -497,6 +497,154 @@ export async function registerRoutes(
     }
   });
 
+  app.delete('/api/projects/:id/git/branch/:branchName', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { branchName } = req.params;
+      if (!branchName || typeof branchName !== 'string') {
+        return res.status(400).json({ message: "Invalid branch name" });
+      }
+
+      const result = await git.deleteBranch(req.params.id, branchName);
+      res.json(result);
+    } catch (error) {
+      console.error("Error deleting branch:", error);
+      res.status(500).json({ message: "Failed to delete branch" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/merge', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { branch } = req.body;
+      if (!branch || typeof branch !== 'string') {
+        return res.status(400).json({ message: "Invalid branch: must be a non-empty string" });
+      }
+
+      const result = await git.mergeBranch(req.params.id, branch);
+      res.json(result);
+    } catch (error) {
+      console.error("Error merging branch:", error);
+      res.status(500).json({ message: "Failed to merge branch" });
+    }
+  });
+
+  app.get('/api/projects/:id/git/stash', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const stashes = await git.stashList(req.params.id);
+      res.json(stashes);
+    } catch (error) {
+      console.error("Error getting stash list:", error);
+      res.status(500).json({ message: "Failed to get stash list" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/stash', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      await git.syncFilesToRepo(req.params.id, project.files);
+      const { message } = req.body;
+      const result = await git.stashSave(req.params.id, message);
+      res.json(result);
+    } catch (error) {
+      console.error("Error stashing changes:", error);
+      res.status(500).json({ message: "Failed to stash changes" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/stash/pop', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { index } = req.body;
+      const result = await git.stashPop(req.params.id, index);
+      res.json(result);
+    } catch (error) {
+      console.error("Error popping stash:", error);
+      res.status(500).json({ message: "Failed to pop stash" });
+    }
+  });
+
+  app.delete('/api/projects/:id/git/stash/:index', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const index = parseInt(req.params.index, 10);
+      if (isNaN(index)) {
+        return res.status(400).json({ message: "Invalid stash index" });
+      }
+
+      const result = await git.stashDrop(req.params.id, index);
+      res.json(result);
+    } catch (error) {
+      console.error("Error dropping stash:", error);
+      res.status(500).json({ message: "Failed to drop stash" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/unstage', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { file } = req.body;
+      if (!file || typeof file !== 'string') {
+        return res.status(400).json({ message: "Invalid file path" });
+      }
+
+      const result = await git.unstageFile(req.params.id, file);
+      res.json(result);
+    } catch (error) {
+      console.error("Error unstaging file:", error);
+      res.status(500).json({ message: "Failed to unstage file" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/reset', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { file } = req.body;
+      if (!file || typeof file !== 'string') {
+        return res.status(400).json({ message: "Invalid file path" });
+      }
+
+      const result = await git.resetFile(req.params.id, file);
+      res.json(result);
+    } catch (error) {
+      console.error("Error resetting file:", error);
+      res.status(500).json({ message: "Failed to reset file" });
+    }
+  });
+
   app.get('/api/projects/:id/download', async (req: any, res) => {
     try {
       const project = await storage.getProject(req.params.id);

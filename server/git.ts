@@ -258,3 +258,150 @@ export async function syncFilesToRepo(projectId: string, files: FileNode): Promi
     return { success: false, message: `Failed to sync files: ${errorMessage}` };
   }
 }
+
+export async function deleteBranch(projectId: string, branchName: string): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    await git.deleteLocalBranch(branchName, true);
+    return { success: true, message: `Deleted branch '${branchName}'` };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to delete branch: ${errorMessage}` };
+  }
+}
+
+export async function mergeBranch(projectId: string, branchName: string): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    await git.merge([branchName]);
+    return { success: true, message: `Merged branch '${branchName}' into current branch` };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to merge: ${errorMessage}` };
+  }
+}
+
+export interface GitStash {
+  index: number;
+  message: string;
+}
+
+export async function stashSave(projectId: string, message?: string): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    const options = message ? ['save', message] : ['save'];
+    await git.stash(options);
+    return { success: true, message: message ? `Stashed changes: "${message}"` : "Stashed changes" };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to stash: ${errorMessage}` };
+  }
+}
+
+export async function stashPop(projectId: string, index?: number): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    const options = index !== undefined ? ['pop', `stash@{${index}}`] : ['pop'];
+    await git.stash(options);
+    return { success: true, message: "Applied and removed stash" };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to pop stash: ${errorMessage}` };
+  }
+}
+
+export async function stashDrop(projectId: string, index?: number): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    const options = index !== undefined ? ['drop', `stash@{${index}}`] : ['drop'];
+    await git.stash(options);
+    return { success: true, message: "Dropped stash" };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to drop stash: ${errorMessage}` };
+  }
+}
+
+export async function stashList(projectId: string): Promise<GitStash[]> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return [];
+  }
+
+  try {
+    const git = getGit(projectId);
+    const result = await git.stashList();
+    
+    return result.all.map((entry, index) => ({
+      index,
+      message: entry.message,
+    }));
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function resetFile(projectId: string, filePath: string): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    await git.checkout(['--', filePath]);
+    return { success: true, message: `Discarded changes in '${filePath}'` };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to reset file: ${errorMessage}` };
+  }
+}
+
+export async function unstageFile(projectId: string, filePath: string): Promise<{ success: boolean; message: string }> {
+  const projectPath = getProjectPath(projectId);
+  
+  if (!fs.existsSync(path.join(projectPath, ".git"))) {
+    return { success: false, message: "Not a git repository. Please initialize first." };
+  }
+
+  try {
+    const git = getGit(projectId);
+    await git.reset(['HEAD', '--', filePath]);
+    return { success: true, message: `Unstaged '${filePath}'` };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, message: `Failed to unstage file: ${errorMessage}` };
+  }
+}
