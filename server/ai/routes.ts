@@ -40,6 +40,8 @@ import {
   PROJECT_TEMPLATES,
   ProjectType,
 } from "./oneshot";
+import { formatAIResponse } from "./formatResponse";
+import { getSystemPromptForMode, BOLT_STYLE_SYSTEM_PROMPT } from "./systemPrompts";
 
 const router = Router();
 
@@ -83,6 +85,73 @@ router.post("/chat", async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error("AI chat error:", error);
     res.status(500).json({ message: error.message || "AI request failed" });
+  }
+});
+
+router.post("/chat/structured", async (req: Request, res: Response) => {
+  try {
+    const { messages, context, model, mode } = req.body as {
+      messages: ChatMessage[];
+      context?: string;
+      model?: ModelId;
+      mode?: string;
+    };
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ message: "Messages array required" });
+    }
+
+    const systemPrompt = mode === "bolt" || mode === "builder" 
+      ? getSystemPromptForMode("bolt", context)
+      : getSystemPromptForMode(mode || "chat", context);
+
+    const allMessages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ];
+
+    const startTime = Date.now();
+    const response = model 
+      ? await chatWithModel(allMessages, model)
+      : await chatCompletion(allMessages as OpenAIChatMessage[]);
+
+    const processingTime = Date.now() - startTime;
+
+    const structuredResponse = formatAIResponse(response.content, response.model);
+    structuredResponse.metadata.processingTime = processingTime;
+
+    res.json({
+      ...structuredResponse,
+      rawContent: response.content,
+      model: response.model,
+    });
+  } catch (error: any) {
+    console.error("AI structured chat error:", error);
+    res.status(500).json({ message: error.message || "AI request failed" });
+  }
+});
+
+router.get("/chat/stream", async (req: Request, res: Response) => {
+  try {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const sendEvent = (event: string, data: unknown) => {
+      res.write(`event: ${event}\n`);
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    sendEvent("connected", { timestamp: Date.now() });
+    sendEvent("complete", { message: "Streaming not yet implemented for this model" });
+    res.end();
+  } catch (error: any) {
+    console.error("AI stream error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: error.message || "Stream failed" });
+    }
   }
 });
 
