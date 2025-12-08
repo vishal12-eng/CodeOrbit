@@ -171,7 +171,7 @@ export default function BuilderMode({
         });
       }
 
-      setExpandedSteps((prev) => new Set([...prev, step.id]));
+      setExpandedSteps((prev) => new Set([...Array.from(prev), step.id]));
     } catch (error: any) {
       updatedSteps[stepIndex] = { ...step, status: "failed" };
       setPlan({ ...plan, steps: updatedSteps });
