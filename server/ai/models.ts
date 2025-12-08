@@ -133,7 +133,7 @@ function getGeminiModelName(modelId: ModelId): string {
   const mapping: Record<string, string> = {
     "gemini-2.5-flash": "gemini-2.5-flash",
     "gemini-1.5-pro": "gemini-1.5-pro",
-    "gemini-pro": "gemini-1.5-flash",
+    "gemini-pro": "gemini-pro",
   };
   return mapping[modelId] || "gemini-2.5-flash";
 }
