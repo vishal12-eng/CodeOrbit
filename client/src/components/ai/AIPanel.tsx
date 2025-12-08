@@ -502,9 +502,57 @@ export default function AIPanel({
                   className="mr-6"
                 />
               ) : (
-                <div className="p-3 rounded-lg text-sm bg-muted/50 mr-6">
-                  <div className="whitespace-pre-wrap break-words leading-relaxed">{message.content}</div>
-                  <div className="flex items-center gap-2 mt-1.5">
+                <div className="p-4 rounded-lg text-sm bg-card border mr-6 space-y-2">
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    {message.content.split('\n\n').map((paragraph, idx) => {
+                      // Format headers
+                      if (paragraph.startsWith('## ')) {
+                        return <h3 key={idx} className="font-semibold text-base mt-2">{paragraph.replace('## ', '')}</h3>;
+                      }
+                      if (paragraph.startsWith('# ')) {
+                        return <h2 key={idx} className="font-bold text-lg mt-3">{paragraph.replace('# ', '')}</h2>;
+                      }
+                      // Format bold text
+                      if (paragraph.startsWith('**') && paragraph.endsWith('**')) {
+                        return <p key={idx} className="font-semibold">{paragraph.replace(/\*\*/g, '')}</p>;
+                      }
+                      // Format lists
+                      if (paragraph.includes('\n') && (paragraph.includes('- ') || paragraph.includes('* ') || /^\d+\./.test(paragraph))) {
+                        return (
+                          <ul key={idx} className="space-y-1 ml-4">
+                            {paragraph.split('\n').filter(l => l.trim()).map((line, li) => (
+                              <li key={li} className="flex gap-2">
+                                {/^\d+\./.test(line.trim()) ? (
+                                  <>
+                                    <span className="font-medium text-muted-foreground">{line.match(/^\d+/)?.[0]}.</span>
+                                    <span>{line.replace(/^\d+\.\s/, '')}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-muted-foreground">•</span>
+                                    <span>{line.trim().replace(/^[-*]\s/, '')}</span>
+                                  </>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }
+                      // Code blocks
+                      if (paragraph.includes('```')) {
+                        const codeMatch = paragraph.match(/```(\w+)?\n([\s\S]*?)\n```/);
+                        if (codeMatch) {
+                          return (
+                            <pre key={idx} className="bg-muted p-3 rounded-md overflow-x-auto text-xs leading-relaxed">
+                              {codeMatch[2]}
+                            </pre>
+                          );
+                        }
+                      }
+                      return <p key={idx} className="leading-relaxed text-muted-foreground">{paragraph}</p>;
+                    })}
+                  </div>
+                  <div className="flex items-center gap-2 mt-3 pt-2 border-t">
                     <span className="text-[10px] text-muted-foreground/60">
                       {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
