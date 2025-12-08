@@ -27,7 +27,6 @@ export class NodeRunner implements Runner {
         this.process = spawn("node", [entryFile], {
           cwd: config.projectDir,
           env: { ...process.env, ...config.env },
-          timeout,
         });
 
         const timeoutId = setTimeout(() => {
