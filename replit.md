@@ -46,7 +46,7 @@ NovaCode IDE is a comprehensive AI-powered cloud development environment compara
 - Added `/api/format` endpoint
 - Format button in editor toolbar
 
-### Phase 10: API Key Management & Security (Latest)
+### Phase 10: API Key Management & Security
 - **API Key Management**: Encrypted storage for OpenAI, Anthropic, Google, and custom API keys
   - Endpoints: GET/POST/DELETE `/api/keys`
   - Encryption: AES-256-CBC with required ENCRYPTION_SECRET environment variable
@@ -75,6 +75,30 @@ NovaCode IDE is a comprehensive AI-powered cloud development environment compara
   - API key ownership verification on delete
   - Path sanitization for ZIP imports
   - Provider enum validation for API keys
+
+### Phase 11: Bolt-Style AI Response Engine (Latest)
+- **Structured AI Response System**:
+  - Created `shared/aiSchema.ts` with types for structured AI responses
+  - `server/ai/formatResponse.ts` parses AI text into organized sections (Goal, Plan, Actions, Implementation, QA, Result)
+  - `server/ai/systemPrompts.ts` with Bolt-style system prompts
+
+- **New AI Components** (`client/src/components/ai/`):
+  - `AIMessage.tsx`: Renders structured messages with typewriter animation
+  - `FileActionChip.tsx`: Color-coded file action chips (read/write/create/delete)
+  - `ActionList.tsx`: Groups and displays file actions by type
+  - `AIHeader.tsx`: Shows model info, mode, and action counts
+  - `AIStreamingRenderer.tsx`: Real-time streaming response renderer
+
+- **AIPanel Enhancements**:
+  - New "Builder" panel mode with structured response rendering
+  - Mode toggle between Chat (traditional) and Builder (Bolt-style)
+  - Integrated AIHeader and AIMessage components
+  - File action tracking and display
+
+- **Backend Updates**:
+  - New endpoint: POST `/api/ai/chat/structured` for builder mode
+  - Returns parsed sections, file actions, and metadata
+  - SSE stream endpoint: GET `/api/ai/chat/stream` (placeholder)
 
 ## Environment Variables
 
