@@ -1,14 +1,53 @@
-import { spawn, type ChildProcess } from "child_process";
+import { spawn, execSync, type ChildProcess } from "child_process";
+import { existsSync } from "fs";
+import { join } from "path";
 import type { Runner, RunnerConfig, RunResult, StreamCallbacks } from "./types";
 import { DEFAULT_TIMEOUTS } from "./types";
 
 export class NodeRunner implements Runner {
   private process: ChildProcess | null = null;
 
+  private async installDependencies(projectDir: string, callbacks?: StreamCallbacks): Promise<boolean> {
+    const packageJsonPath = join(projectDir, "package.json");
+    
+    if (!existsSync(packageJsonPath)) {
+      return true; // No package.json, nothing to install
+    }
+
+    try {
+      callbacks?.onStdout?.("Installing dependencies...\n");
+      
+      execSync("npm install --legacy-peer-deps", {
+        cwd: projectDir,
+        stdio: "pipe",
+        timeout: 60000, // 60 second timeout for npm install
+      });
+      
+      callbacks?.onStdout?.("Dependencies installed successfully.\n\n");
+      return true;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      callbacks?.onStderr?.(`Failed to install dependencies: ${errorMessage}\n`);
+      return false;
+    }
+  }
+
   async run(config: RunnerConfig, callbacks?: StreamCallbacks): Promise<RunResult> {
     const startTime = Date.now();
     const timeout = config.timeout || DEFAULT_TIMEOUTS.script;
     const entryFile = config.entryFile || "main.js";
+
+    // Install dependencies first if package.json exists
+    const depsInstalled = await this.installDependencies(config.projectDir, callbacks);
+    if (!depsInstalled) {
+      return {
+        success: false,
+        stdout: "",
+        stderr: "Failed to install npm dependencies. Check your package.json for errors.",
+        executionTime: Date.now() - startTime,
+        exitCode: -1,
+      };
+    }
 
     return new Promise<RunResult>((resolve) => {
       let stdout = "";
