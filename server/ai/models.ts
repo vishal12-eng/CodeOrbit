@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 
 export type ModelType = "openai" | "anthropic" | "gemini" | "grok";
 
@@ -12,7 +13,9 @@ export type ModelId =
   | "claude-3-opus"
   | "gemini-pro"
   | "gemini-1.5-pro"
-  | "grok-1";
+  | "gemini-2.5-flash"
+  | "grok-2"
+  | "grok-2-vision";
 
 export interface ModelConfig {
   id: ModelId;
@@ -29,9 +32,11 @@ export const AVAILABLE_MODELS: ModelConfig[] = [
   { id: "gpt-4", name: "GPT-4", type: "openai", contextWindow: 8192, maxOutputTokens: 4096 },
   { id: "claude-3-5-sonnet", name: "Claude 3.5 Sonnet", type: "anthropic", contextWindow: 200000, maxOutputTokens: 8192 },
   { id: "claude-3-opus", name: "Claude 3 Opus", type: "anthropic", contextWindow: 200000, maxOutputTokens: 4096 },
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", type: "gemini", contextWindow: 1000000, maxOutputTokens: 8192 },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", type: "gemini", contextWindow: 1000000, maxOutputTokens: 8192 },
   { id: "gemini-pro", name: "Gemini Pro", type: "gemini", contextWindow: 32000, maxOutputTokens: 2048 },
-  { id: "grok-1", name: "Grok", type: "grok", contextWindow: 8192, maxOutputTokens: 4096 },
+  { id: "grok-2", name: "Grok 2", type: "grok", contextWindow: 131072, maxOutputTokens: 4096 },
+  { id: "grok-2-vision", name: "Grok 2 Vision", type: "grok", contextWindow: 8192, maxOutputTokens: 4096 },
 ];
 
 export function getModelConfig(modelId: ModelId): ModelConfig {
@@ -48,6 +53,8 @@ export function getModelType(modelId: ModelId): ModelType {
 
 let openaiClient: OpenAI | null = null;
 let anthropicClient: Anthropic | null = null;
+let geminiClient: GoogleGenAI | null = null;
+let grokClient: OpenAI | null = null;
 
 function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
@@ -67,6 +74,30 @@ function getAnthropicClient(): Anthropic {
     anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
   return anthropicClient;
+}
+
+function getGeminiClient(): GoogleGenAI {
+  if (!geminiClient) {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      throw new Error("Gemini API key not configured. Please add GEMINI_API_KEY to your secrets.");
+    }
+    geminiClient = new GoogleGenAI({ apiKey });
+  }
+  return geminiClient;
+}
+
+function getGrokClient(): OpenAI {
+  if (!grokClient) {
+    if (!process.env.XAI_API_KEY) {
+      throw new Error("xAI API key not configured. Please add XAI_API_KEY to your secrets.");
+    }
+    grokClient = new OpenAI({ 
+      baseURL: "https://api.x.ai/v1", 
+      apiKey: process.env.XAI_API_KEY 
+    });
+  }
+  return grokClient;
 }
 
 export interface ChatMessage {
@@ -96,6 +127,23 @@ function getAnthropicModelName(modelId: ModelId): string {
     "claude-3-opus": "claude-3-opus-20240229",
   };
   return mapping[modelId] || "claude-3-5-sonnet-20241022";
+}
+
+function getGeminiModelName(modelId: ModelId): string {
+  const mapping: Record<string, string> = {
+    "gemini-2.5-flash": "gemini-2.5-flash",
+    "gemini-1.5-pro": "gemini-1.5-pro",
+    "gemini-pro": "gemini-1.5-flash",
+  };
+  return mapping[modelId] || "gemini-2.5-flash";
+}
+
+function getGrokModelName(modelId: ModelId): string {
+  const mapping: Record<string, string> = {
+    "grok-2": "grok-2-1212",
+    "grok-2-vision": "grok-2-vision-1212",
+  };
+  return mapping[modelId] || "grok-2-1212";
 }
 
 async function chatWithOpenAI(
@@ -153,10 +201,31 @@ async function chatWithGemini(
   modelId: ModelId,
   maxTokens: number = 4096
 ): Promise<ModelResponse> {
-  if (!process.env.GOOGLE_API_KEY) {
-    throw new Error("Gemini API key not configured. Falling back to OpenAI.");
-  }
-  return chatWithOpenAI(messages, "gpt-4o", maxTokens);
+  const client = getGeminiClient();
+  const modelName = getGeminiModelName(modelId);
+  
+  const systemMessage = messages.find(m => m.role === "system");
+  const nonSystemMessages = messages.filter(m => m.role !== "system");
+  
+  const contents = nonSystemMessages.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const response = await client.models.generateContent({
+    model: modelName,
+    contents: contents,
+    config: {
+      systemInstruction: systemMessage?.content || undefined,
+      maxOutputTokens: maxTokens,
+    },
+  });
+
+  return {
+    content: response.text || "",
+    model: modelName,
+    tokensUsed: response.usageMetadata?.totalTokenCount,
+  };
 }
 
 async function chatWithGrok(
@@ -164,10 +233,20 @@ async function chatWithGrok(
   modelId: ModelId,
   maxTokens: number = 4096
 ): Promise<ModelResponse> {
-  if (!process.env.XAI_API_KEY) {
-    throw new Error("Grok API key not configured. Falling back to OpenAI.");
-  }
-  return chatWithOpenAI(messages, "gpt-4o", maxTokens);
+  const client = getGrokClient();
+  const modelName = getGrokModelName(modelId);
+  
+  const response = await client.chat.completions.create({
+    model: modelName,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    max_tokens: maxTokens,
+  });
+
+  return {
+    content: response.choices[0].message.content || "",
+    model: modelName,
+    tokensUsed: response.usage?.total_tokens,
+  };
 }
 
 export async function chatWithModel(
@@ -235,6 +314,39 @@ export async function generateJSONWithModel(
     });
 
     return JSON.parse(response.choices[0].message.content || "{}");
+  } else if (modelConfig.type === "grok") {
+    const client = getGrokClient();
+    const modelName = getGrokModelName(modelId);
+    
+    const response = await client.chat.completions.create({
+      model: modelName,
+      messages: [
+        { role: "system", content: systemPrompt + "\n\nRespond ONLY with valid JSON, no additional text." },
+        { role: "user", content: prompt },
+      ],
+      response_format: { type: "json_object" },
+      max_tokens: modelConfig.maxOutputTokens,
+    });
+
+    return JSON.parse(response.choices[0].message.content || "{}");
+  } else if (modelConfig.type === "gemini") {
+    const client = getGeminiClient();
+    const modelName = getGeminiModelName(modelId);
+    
+    const response = await client.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        systemInstruction: systemPrompt + "\n\nRespond ONLY with valid JSON, no additional text.",
+        responseMimeType: "application/json",
+      },
+    });
+
+    const rawJson = response.text;
+    if (rawJson) {
+      return JSON.parse(rawJson);
+    }
+    return {};
   } else {
     const response = await chatWithModel(
       [
@@ -261,7 +373,7 @@ export function isModelAvailable(modelId: ModelId): boolean {
     case "anthropic":
       return !!process.env.ANTHROPIC_API_KEY;
     case "gemini":
-      return !!process.env.GOOGLE_API_KEY;
+      return !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
     case "grok":
       return !!process.env.XAI_API_KEY;
     default:
@@ -277,7 +389,7 @@ export function getAvailableModels(): ModelConfig[] {
       case "anthropic":
         return !!process.env.ANTHROPIC_API_KEY;
       case "gemini":
-        return !!process.env.GOOGLE_API_KEY;
+        return !!(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
       case "grok":
         return !!process.env.XAI_API_KEY;
       default:

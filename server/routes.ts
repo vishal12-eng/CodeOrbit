@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, type FileNode } from "@shared/schema";
 import aiRoutes from "./ai/routes";
+import { isAuthenticated } from "./replitAuth";
 import { 
   runProject, 
   stopProject,
@@ -11,6 +12,7 @@ import {
   ProjectType,
   type RunResult 
 } from "./runners";
+import * as git from "./git";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -18,9 +20,13 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use('/api/ai', aiRoutes);
 
-  app.get('/api/auth/user', async (req: any, res) => {
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const user = { id: "demo-user", email: "demo@example.com", firstName: "Demo", lastName: "User" };
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -28,9 +34,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get('/api/projects', async (req: any, res) => {
+  app.get('/api/projects', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = "demo-user";
+      const userId = req.user.claims.sub;
       const projects = await storage.getProjectsByOwner(userId);
       res.json(projects);
     } catch (error) {
@@ -39,9 +45,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/projects', async (req: any, res) => {
+  app.post('/api/projects', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = "demo-user";
+      const userId = req.user.claims.sub;
       const parsed = insertProjectSchema.safeParse({ ...req.body, ownerId: userId });
       
       if (!parsed.success) {
@@ -107,9 +113,9 @@ export async function registerRoutes(
     }
   });
 
-  app.post('/api/projects/:id/duplicate', async (req: any, res) => {
+  app.post('/api/projects/:id/duplicate', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = "demo-user";
+      const userId = req.user.claims.sub;
       const project = await storage.getProject(req.params.id);
       
       if (!project) {
@@ -315,6 +321,149 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting env var:", error);
       res.status(500).json({ message: "Failed to delete environment variable" });
+    }
+  });
+
+  app.get('/api/projects/:id/git/status', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      await git.syncFilesToRepo(req.params.id, project.files);
+      const status = await git.getStatus(req.params.id);
+      res.json(status);
+    } catch (error) {
+      console.error("Error getting git status:", error);
+      res.status(500).json({ message: "Failed to get git status" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/init', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const result = await git.initRepo(req.params.id, project.files);
+      res.json(result);
+    } catch (error) {
+      console.error("Error initializing git repo:", error);
+      res.status(500).json({ message: "Failed to initialize git repository" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/add', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { files } = req.body;
+      if (!files || !Array.isArray(files)) {
+        return res.status(400).json({ message: "Invalid files: must be an array of file paths" });
+      }
+
+      await git.syncFilesToRepo(req.params.id, project.files);
+      const result = await git.addFiles(req.params.id, files);
+      res.json(result);
+    } catch (error) {
+      console.error("Error staging files:", error);
+      res.status(500).json({ message: "Failed to stage files" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/commit', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { message } = req.body;
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ message: "Invalid commit message: must be a non-empty string" });
+      }
+
+      const result = await git.commit(req.params.id, message);
+      res.json(result);
+    } catch (error) {
+      console.error("Error committing:", error);
+      res.status(500).json({ message: "Failed to commit" });
+    }
+  });
+
+  app.get('/api/projects/:id/git/log', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+      const log = await git.getLog(req.params.id, limit);
+      res.json(log);
+    } catch (error) {
+      console.error("Error getting git log:", error);
+      res.status(500).json({ message: "Failed to get git log" });
+    }
+  });
+
+  app.get('/api/projects/:id/git/branches', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const branches = await git.getBranches(req.params.id);
+      res.json(branches);
+    } catch (error) {
+      console.error("Error getting branches:", error);
+      res.status(500).json({ message: "Failed to get branches" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/checkout', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { branch } = req.body;
+      if (!branch || typeof branch !== 'string') {
+        return res.status(400).json({ message: "Invalid branch: must be a non-empty string" });
+      }
+
+      const result = await git.checkout(req.params.id, branch);
+      res.json(result);
+    } catch (error) {
+      console.error("Error checking out branch:", error);
+      res.status(500).json({ message: "Failed to checkout branch" });
+    }
+  });
+
+  app.post('/api/projects/:id/git/branch', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { name } = req.body;
+      if (!name || typeof name !== 'string') {
+        return res.status(400).json({ message: "Invalid branch name: must be a non-empty string" });
+      }
+
+      const result = await git.createBranch(req.params.id, name);
+      res.json(result);
+    } catch (error) {
+      console.error("Error creating branch:", error);
+      res.status(500).json({ message: "Failed to create branch" });
     }
   });
 

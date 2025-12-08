@@ -1,4 +1,4 @@
-import { Settings, User } from 'lucide-react';
+import { LogOut, Settings, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -7,12 +7,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuth } from '@/hooks/useAuth';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function UserMenu() {
-  const user = { email: "demo@example.com", firstName: "Demo", lastName: "User" };
+  const { user, isLoading, isAuthenticated } = useAuth();
 
-  const nameForInitials = user.email ?? user.firstName ?? 'User';
+  if (isLoading) {
+    return <Skeleton className="h-8 w-8 rounded-full" />;
+  }
+
+  if (!isAuthenticated || !user) {
+    return (
+      <Button variant="default" size="sm" asChild data-testid="button-login">
+        <a href="/api/login">Log In</a>
+      </Button>
+    );
+  }
+
+  const nameForInitials = user.firstName ?? user.email ?? 'User';
   const initials = nameForInitials.slice(0, 2).toUpperCase();
 
   return (
@@ -20,6 +34,9 @@ export default function UserMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" data-testid="button-user-menu">
           <Avatar className="h-8 w-8">
+            {user.profileImageUrl && (
+              <AvatarImage src={user.profileImageUrl} alt={user.firstName ?? 'User'} />
+            )}
             <AvatarFallback className="bg-primary/10 text-primary text-xs">
               {initials}
             </AvatarFallback>
@@ -39,6 +56,13 @@ export default function UserMenu() {
         <DropdownMenuItem data-testid="menu-item-settings">
           <Settings className="mr-2 h-4 w-4" />
           Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild data-testid="menu-item-logout">
+          <a href="/api/logout">
+            <LogOut className="mr-2 h-4 w-4" />
+            Log Out
+          </a>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
