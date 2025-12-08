@@ -14,6 +14,7 @@ import {
 } from "./runners";
 import * as git from "./git";
 import { formatCode } from "./formatter";
+import archiver from "archiver";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -493,6 +494,130 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error creating branch:", error);
       res.status(500).json({ message: "Failed to create branch" });
+    }
+  });
+
+  app.get('/api/projects/:id/download', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="${project.name.replace(/[^a-z0-9]/gi, '_')}.zip"`);
+
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.on('error', (err) => {
+        console.error("Archive error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ message: "Failed to create archive" });
+        }
+      });
+
+      archive.pipe(res);
+
+      const addFilesToArchive = (node: FileNode, currentPath: string) => {
+        if (node.type === 'file') {
+          archive.append(node.content || '', { name: currentPath });
+        } else if (node.type === 'folder' && node.children) {
+          for (const child of node.children) {
+            const childPath = currentPath ? `${currentPath}/${child.name}` : child.name;
+            addFilesToArchive(child, childPath);
+          }
+        }
+      };
+
+      if (project.files.type === 'folder' && project.files.children) {
+        for (const child of project.files.children) {
+          addFilesToArchive(child, child.name);
+        }
+      } else {
+        addFilesToArchive(project.files, project.files.name);
+      }
+
+      await archive.finalize();
+    } catch (error) {
+      console.error("Error downloading project:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: "Failed to download project" });
+      }
+    }
+  });
+
+  app.post('/api/projects/:id/upload', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { files: uploadedFiles, targetPath } = req.body;
+      
+      if (!uploadedFiles || !Array.isArray(uploadedFiles)) {
+        return res.status(400).json({ message: "Invalid files: must be an array of {name, content, path?} objects" });
+      }
+
+      const deepCloneFileNode = (node: FileNode): FileNode => {
+        const cloned: FileNode = { type: node.type, name: node.name };
+        if (node.content !== undefined) cloned.content = node.content;
+        if (node.children) cloned.children = node.children.map(deepCloneFileNode);
+        return cloned;
+      };
+
+      const addFileToNode = (node: FileNode, pathParts: string[], fileName: string, content: string): void => {
+        if (pathParts.length === 0) {
+          if (node.type === 'folder') {
+            const existingIndex = node.children?.findIndex(c => c.name === fileName);
+            const newFile: FileNode = { type: 'file', name: fileName, content };
+            
+            if (existingIndex !== undefined && existingIndex >= 0 && node.children) {
+              node.children[existingIndex] = newFile;
+            } else {
+              node.children = node.children || [];
+              node.children.push(newFile);
+            }
+          }
+          return;
+        }
+
+        const [currentPart, ...remainingParts] = pathParts;
+        
+        if (node.type === 'folder') {
+          let targetChild = node.children?.find(c => c.name === currentPart && c.type === 'folder');
+          
+          if (!targetChild) {
+            targetChild = { type: 'folder', name: currentPart, children: [] };
+            node.children = node.children || [];
+            node.children.push(targetChild);
+          }
+          
+          addFileToNode(targetChild, remainingParts, fileName, content);
+        }
+      };
+
+      const updatedFiles = deepCloneFileNode(project.files);
+      
+      for (const file of uploadedFiles) {
+        if (!file.name || typeof file.name !== 'string') {
+          continue;
+        }
+        
+        const basePath = (targetPath || '').split('/').filter((p: string) => p && p !== 'root');
+        const filePath = (file.path || '').split('/').filter((p: string) => p && p !== '.');
+        const fullPathParts = [...basePath, ...filePath.slice(0, -1)];
+        const fileName = filePath.length > 0 ? filePath[filePath.length - 1] : file.name;
+        
+        addFileToNode(updatedFiles, fullPathParts, fileName, file.content || '');
+      }
+
+      const updated = await storage.updateProject(req.params.id, { files: updatedFiles });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error uploading files:", error);
+      res.status(500).json({ message: "Failed to upload files" });
     }
   });
 

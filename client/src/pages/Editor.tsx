@@ -881,11 +881,13 @@ export default function Editor() {
                       <FileTree
                         files={project.files}
                         activeFile={activeTab}
+                        projectId={projectId}
                         onFileSelect={handleFileSelect}
                         onCreateFile={handleCreateFile}
                         onCreateFolder={handleCreateFolder}
                         onRename={handleRenameItem}
                         onDelete={handleDeleteItem}
+                        onFilesChange={() => queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] })}
                       />
                     )}
                     {leftPanelTab === 'git' && (

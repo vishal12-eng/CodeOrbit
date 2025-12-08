@@ -1,15 +1,16 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight,
   File,
   Folder,
   FolderOpen,
-  Plus,
   FilePlus,
   FolderPlus,
   Trash2,
   Edit2,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,17 +19,25 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { FileNode } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { apiRequest } from '@/lib/queryClient';
 
 interface FileTreeProps {
   files: FileNode;
   activeFile: string | null;
+  projectId: string;
   onFileSelect: (path: string, content: string) => void;
   onCreateFile: (path: string) => void;
   onCreateFolder: (path: string) => void;
   onRename: (path: string) => void;
   onDelete: (path: string) => void;
+  onFilesChange?: () => void;
 }
 
 interface TreeNodeProps {
@@ -198,12 +207,75 @@ function TreeNode({
 export default function FileTree({
   files,
   activeFile,
+  projectId,
   onFileSelect,
   onCreateFile,
   onCreateFolder,
   onRename,
   onDelete,
+  onFilesChange,
 }: FileTreeProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleDownload = () => {
+    const downloadUrl = `/api/projects/${projectId}/download`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = 'project.zip';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputFiles = e.target.files;
+    if (!inputFiles || inputFiles.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      const uploadedFiles: { name: string; content: string; path?: string }[] = [];
+
+      for (let i = 0; i < inputFiles.length; i++) {
+        const file = inputFiles[i];
+        const content = await readFileAsText(file);
+        const relativePath = (file as any).webkitRelativePath || file.name;
+        uploadedFiles.push({ 
+          name: file.name, 
+          content,
+          path: relativePath,
+        });
+      }
+
+      await apiRequest('POST', `/api/projects/${projectId}/upload`, {
+        files: uploadedFiles,
+        targetPath: '/root',
+      });
+
+      onFilesChange?.();
+    } catch (error) {
+      console.error('Error uploading files:', error);
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const readFileAsText = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-b">
@@ -211,26 +283,73 @@ export default function FileTree({
           Files
         </span>
         <div className="flex gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => onCreateFile('/root')}
-            data-testid="button-new-file"
-          >
-            <FilePlus className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => onCreateFolder('/root')}
-            data-testid="button-new-folder"
-          >
-            <FolderPlus className="h-3.5 w-3.5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleUploadClick}
+                disabled={isUploading}
+                data-testid="button-upload-files"
+              >
+                <Upload className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Upload Files</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={handleDownload}
+                data-testid="button-download-project"
+              >
+                <Download className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Download as ZIP</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => onCreateFile('/root')}
+                data-testid="button-new-file"
+              >
+                <FilePlus className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>New File</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => onCreateFolder('/root')}
+                data-testid="button-new-folder"
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>New Folder</TooltipContent>
+          </Tooltip>
         </div>
       </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFileUpload}
+        data-testid="input-file-upload"
+      />
       <div className="flex-1 overflow-auto">
         <TreeNode
           node={files}
