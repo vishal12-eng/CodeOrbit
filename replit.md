@@ -46,6 +46,50 @@ NovaCode IDE is a comprehensive AI-powered cloud development environment compara
 - Added `/api/format` endpoint
 - Format button in editor toolbar
 
+### Phase 10: API Key Management & Security (Latest)
+- **API Key Management**: Encrypted storage for OpenAI, Anthropic, Google, and custom API keys
+  - Endpoints: GET/POST/DELETE `/api/keys`
+  - Encryption: AES-256-CBC with required ENCRYPTION_SECRET environment variable
+  - UI: Settings page with add/delete functionality
+
+- **Project Sharing**: Secure share tokens for public project access
+  - Enable sharing: POST `/api/projects/:id/share` (requires ownership)
+  - Disable sharing: DELETE `/api/projects/:id/share`
+  - Public access: GET `/api/shared/:token`
+
+- **ZIP Import**: Bulk project import from ZIP files
+  - Endpoint: POST `/api/projects/import-zip`
+  - Security: Path traversal prevention, blacklisted extensions/directories
+  - Size limits: 50MB max ZIP, 1MB per file
+
+- **Project Analytics**: GET `/api/projects/:id/analytics`
+  - Metrics: Lines of code, file count, language, project type
+
+- **Rate Limiting**: Code execution rate limiting (30 req/min per IP)
+  - Applied to both `/api/run/:projectId` and `/api/run/:projectId/stream`
+  - Memory cleanup via periodic eviction
+
+- **Security Improvements**:
+  - Required ENCRYPTION_SECRET environment variable (32+ characters)
+  - Ownership verification for share and analytics operations
+  - API key ownership verification on delete
+  - Path sanitization for ZIP imports
+  - Provider enum validation for API keys
+
+## Environment Variables
+
+Required for production:
+- `DATABASE_URL`: PostgreSQL connection string
+- `SESSION_SECRET`: Session encryption secret
+- `REPLIT_DOMAINS`: Comma-separated allowed domains
+- `ENCRYPTION_SECRET`: API key encryption secret (32+ characters, required)
+
+Optional AI integrations:
+- `OPENAI_API_KEY`: OpenAI API key for GPT models and DALL-E
+- `ANTHROPIC_API_KEY`: Anthropic API key for Claude models
+- `GOOGLE_GENERATIVE_AI_API_KEY`: Google API key for Gemini
+- `XAI_API_KEY`: xAI API key for Grok
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

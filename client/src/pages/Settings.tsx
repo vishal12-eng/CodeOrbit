@@ -1,19 +1,26 @@
+import { useState } from 'react';
 import { Link } from 'wouter';
-import { ArrowLeft, RotateCcw, Palette, Code, Save, Play, Sparkles, Keyboard, Monitor, Moon, Sun } from 'lucide-react';
+import { ArrowLeft, RotateCcw, Palette, Code, Save, Play, Sparkles, Keyboard, Monitor, Moon, Sun, Key, Plus, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import Logo from '@/components/layout/Logo';
 import ThemeToggle from '@/components/layout/ThemeToggle';
 import UserMenu from '@/components/layout/UserMenu';
 import PageTransition from '@/components/layout/PageTransition';
 import { useSettings, type Settings } from '@/hooks/use-settings';
 import { useToast } from '@/hooks/use-toast';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import type { ApiKeyPublic } from '@shared/schema';
 
 const accentColors = [
   { value: 'blue', label: 'Blue', class: 'bg-blue-500' },
@@ -89,15 +96,95 @@ function SettingRow({
   );
 }
 
+const apiProviders = [
+  { value: 'openai', label: 'OpenAI', description: 'GPT-4o, GPT-4 Turbo' },
+  { value: 'anthropic', label: 'Anthropic', description: 'Claude 3.5 Sonnet' },
+  { value: 'google', label: 'Google', description: 'Gemini Pro' },
+  { value: 'custom', label: 'Custom', description: 'Other providers' },
+];
+
 export default function Settings() {
   const { settings, updateSettings, resetSettings } = useSettings();
   const { toast } = useToast();
+  
+  const [isAddKeyDialogOpen, setIsAddKeyDialogOpen] = useState(false);
+  const [newKeyProvider, setNewKeyProvider] = useState('openai');
+  const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyValue, setNewKeyValue] = useState('');
+  const [deleteKeyId, setDeleteKeyId] = useState<string | null>(null);
+  
+  const { data: apiKeys = [], isLoading: isLoadingKeys } = useQuery<ApiKeyPublic[]>({
+    queryKey: ['/api/keys'],
+  });
+  
+  const addKeyMutation = useMutation({
+    mutationFn: async (data: { provider: string; name: string; apiKey: string }) => {
+      const res = await apiRequest('POST', '/api/keys', data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/keys'] });
+      setIsAddKeyDialogOpen(false);
+      setNewKeyProvider('openai');
+      setNewKeyName('');
+      setNewKeyValue('');
+      toast({
+        title: 'API key added',
+        description: 'Your API key has been securely stored.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add API key.',
+        variant: 'destructive',
+      });
+    },
+  });
+  
+  const deleteKeyMutation = useMutation({
+    mutationFn: async (keyId: string) => {
+      await apiRequest('DELETE', `/api/keys/${keyId}`);
+      return keyId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/keys'] });
+      setDeleteKeyId(null);
+      toast({
+        title: 'API key deleted',
+        description: 'Your API key has been removed.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete API key.',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleResetAll = () => {
     resetSettings();
     toast({
       title: 'Settings reset',
       description: 'All settings have been restored to defaults.',
+    });
+  };
+  
+  const handleAddKey = () => {
+    if (!newKeyName.trim() || !newKeyValue.trim()) {
+      toast({
+        title: 'Missing fields',
+        description: 'Please provide both a name and API key.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    addKeyMutation.mutate({
+      provider: newKeyProvider,
+      name: newKeyName.trim(),
+      apiKey: newKeyValue.trim(),
     });
   };
 
@@ -637,6 +724,71 @@ export default function Settings() {
 
             <Card>
               <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Key className="h-5 w-5 text-muted-foreground" />
+                    <CardTitle className="text-lg">API Keys</CardTitle>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    onClick={() => setIsAddKeyDialogOpen(true)}
+                    data-testid="button-add-api-key"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Key
+                  </Button>
+                </div>
+                <CardDescription>
+                  Manage your AI provider API keys for enhanced features
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingKeys ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : apiKeys.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Key className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">No API keys configured</p>
+                    <p className="text-xs mt-1">Add your API keys to use custom AI models</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {apiKeys.map((key) => (
+                      <div 
+                        key={key.id} 
+                        className="flex items-center justify-between gap-4 p-3 rounded-md border"
+                        data-testid={`card-api-key-${key.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Badge variant="outline" className="capitalize">
+                            {key.provider}
+                          </Badge>
+                          <div>
+                            <p className="text-sm font-medium">{key.name}</p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              {key.keyPreview}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setDeleteKeyId(key.id)}
+                          data-testid={`button-delete-key-${key.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
                 <div className="flex items-center gap-2">
                   <Keyboard className="h-5 w-5 text-muted-foreground" />
                   <CardTitle className="text-lg">Keyboard Shortcuts</CardTitle>
@@ -671,6 +823,97 @@ export default function Settings() {
           </div>
         </div>
       </main>
+
+      <Dialog open={isAddKeyDialogOpen} onOpenChange={setIsAddKeyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add API Key</DialogTitle>
+            <DialogDescription>
+              Add your API key to use with AI features. Keys are encrypted and stored securely.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="provider">Provider</Label>
+              <Select value={newKeyProvider} onValueChange={setNewKeyProvider}>
+                <SelectTrigger data-testid="select-key-provider">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {apiProviders.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      <div className="flex flex-col">
+                        <span>{p.label}</span>
+                        <span className="text-xs text-muted-foreground">{p.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="key-name">Name</Label>
+              <Input
+                id="key-name"
+                placeholder="My OpenAI Key"
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                data-testid="input-key-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="key-value">API Key</Label>
+              <Input
+                id="key-value"
+                type="password"
+                placeholder="sk-..."
+                value={newKeyValue}
+                onChange={(e) => setNewKeyValue(e.target.value)}
+                data-testid="input-key-value"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddKeyDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddKey} 
+              disabled={addKeyMutation.isPending}
+              data-testid="button-confirm-add-key"
+            >
+              {addKeyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Add Key
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteKeyId} onOpenChange={() => setDeleteKeyId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete API Key</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this API key? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteKeyId(null)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => deleteKeyId && deleteKeyMutation.mutate(deleteKeyId)}
+              disabled={deleteKeyMutation.isPending}
+              data-testid="button-confirm-delete-key"
+            >
+              {deleteKeyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </PageTransition>
   );
 }

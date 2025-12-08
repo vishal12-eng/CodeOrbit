@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProjectSchema, type FileNode } from "@shared/schema";
+import { insertProjectSchema, insertApiKeySchema, apiKeyProviderEnum, type FileNode, type ApiKeyProvider } from "@shared/schema";
 import aiRoutes from "./ai/routes";
 import { isAuthenticated } from "./replitAuth";
 import { 
@@ -15,6 +15,73 @@ import {
 import * as git from "./git";
 import { formatCode } from "./formatter";
 import archiver from "archiver";
+import AdmZip from "adm-zip";
+import { Readable } from "stream";
+
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_WINDOW = 60000;
+const RATE_LIMIT_MAX_REQUESTS = 30;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitMap.entries()) {
+    if (now > entry.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+}, RATE_LIMIT_WINDOW);
+
+function checkRateLimit(identifier: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(identifier);
+  
+  if (!entry || now > entry.resetTime) {
+    rateLimitMap.set(identifier, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return true;
+  }
+  
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false;
+  }
+  
+  entry.count++;
+  return true;
+}
+
+function sanitizePath(entryPath: string): string | null {
+  const parts = entryPath.split(/[/\\]/);
+  const sanitized: string[] = [];
+  
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') return null;
+    if (part.startsWith('~') || part.includes(':')) return null;
+    sanitized.push(part);
+  }
+  
+  if (sanitized.length === 0) return null;
+  return sanitized.join('/');
+}
+
+function countLinesOfCode(node: FileNode): number {
+  if (node.type === 'file' && node.content) {
+    return node.content.split('\n').length;
+  }
+  if (node.type === 'folder' && node.children) {
+    return node.children.reduce((sum, child) => sum + countLinesOfCode(child), 0);
+  }
+  return 0;
+}
+
+function countFiles(node: FileNode): number {
+  if (node.type === 'file') {
+    return 1;
+  }
+  if (node.type === 'folder' && node.children) {
+    return node.children.reduce((sum, child) => sum + countFiles(child), 0);
+  }
+  return 0;
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -186,8 +253,48 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/projects/:id/analytics', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      if (project.ownerId !== userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      const linesOfCode = countLinesOfCode(project.files);
+      const fileCount = countFiles(project.files);
+      const detectedType = detectProjectType(project.files);
+      
+      res.json({
+        linesOfCode,
+        fileCount,
+        language: project.language,
+        projectType: detectedType,
+        projectTypeLabel: getProjectTypeLabel(detectedType),
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      });
+    } catch (error) {
+      console.error("Error fetching project analytics:", error);
+      res.status(500).json({ message: "Failed to fetch project analytics" });
+    }
+  });
+
   app.post('/api/run/:projectId', async (req: any, res) => {
     try {
+      const identifier = req.ip || 'unknown';
+      if (!checkRateLimit(identifier)) {
+        return res.status(429).json({ 
+          message: "Rate limit exceeded. Please wait before running code again.",
+          retryAfter: Math.ceil(RATE_LIMIT_WINDOW / 1000)
+        });
+      }
+
       const project = await storage.getProject(req.params.projectId);
       
       if (!project) {
@@ -203,7 +310,7 @@ export async function registerRoutes(
         files: project.files,
         language,
         entryFile: req.body.entryFile,
-        timeout: req.body.timeout,
+        timeout: Math.min(req.body.timeout || 30000, 120000),
         env: req.body.env,
       });
 
@@ -216,6 +323,14 @@ export async function registerRoutes(
 
   app.get('/api/run/:projectId/stream', async (req: any, res) => {
     try {
+      const identifier = req.ip || 'unknown';
+      if (!checkRateLimit(identifier)) {
+        return res.status(429).json({ 
+          message: "Rate limit exceeded. Please wait before running code again.",
+          retryAfter: Math.ceil(RATE_LIMIT_WINDOW / 1000)
+        });
+      }
+
       const project = await storage.getProject(req.params.projectId);
       
       if (!project) {
@@ -645,6 +760,131 @@ export async function registerRoutes(
     }
   });
 
+  app.get('/api/keys', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const keys = await storage.getApiKeys(userId);
+      res.json(keys);
+    } catch (error) {
+      console.error("Error fetching API keys:", error);
+      res.status(500).json({ message: "Failed to fetch API keys" });
+    }
+  });
+
+  app.post('/api/keys', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { provider, name, apiKey } = req.body;
+      
+      const parsed = insertApiKeySchema.safeParse({ userId, provider, name, apiKey });
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Invalid API key data", errors: parsed.error.errors });
+      }
+      
+      const validatedProvider = apiKeyProviderEnum.safeParse(provider);
+      if (!validatedProvider.success) {
+        return res.status(400).json({ message: "Invalid provider. Must be one of: openai, anthropic, google, custom" });
+      }
+
+      const trimmedName = (name || '').trim();
+      const trimmedKey = (apiKey || '').trim();
+      
+      if (!trimmedName || trimmedName.length > 100) {
+        return res.status(400).json({ message: "Name must be between 1 and 100 characters" });
+      }
+      
+      if (trimmedKey.length < 10) {
+        return res.status(400).json({ message: "API key must be at least 10 characters" });
+      }
+
+      const key = await storage.createApiKey(userId, validatedProvider.data, trimmedName, trimmedKey);
+      res.status(201).json(key);
+    } catch (error) {
+      console.error("Error creating API key:", error);
+      res.status(500).json({ message: "Failed to create API key" });
+    }
+  });
+
+  app.delete('/api/keys/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const keyId = req.params.id;
+      
+      const userKeys = await storage.getApiKeys(userId);
+      const keyExists = userKeys.some(k => k.id === keyId);
+      
+      if (!keyExists) {
+        return res.status(404).json({ message: "API key not found or not owned by you" });
+      }
+      
+      const deleted = await storage.deleteApiKey(userId, keyId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "API key not found" });
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting API key:", error);
+      res.status(500).json({ message: "Failed to delete API key" });
+    }
+  });
+
+  app.post('/api/projects/:id/share', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await storage.enableProjectSharing(req.params.id, userId);
+      
+      if (!result) {
+        return res.status(404).json({ message: "Project not found or not owned by you" });
+      }
+      
+      res.json({ 
+        shareToken: result.shareToken,
+        shareUrl: `/shared/${result.shareToken}` 
+      });
+    } catch (error) {
+      console.error("Error enabling sharing:", error);
+      res.status(500).json({ message: "Failed to enable project sharing" });
+    }
+  });
+
+  app.delete('/api/projects/:id/share', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const success = await storage.disableProjectSharing(req.params.id, userId);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Project not found or not owned by you" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error disabling sharing:", error);
+      res.status(500).json({ message: "Failed to disable project sharing" });
+    }
+  });
+
+  app.get('/api/shared/:token', async (req: any, res) => {
+    try {
+      const project = await storage.getProjectByShareToken(req.params.token);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Shared project not found or sharing is disabled" });
+      }
+      
+      res.json({
+        id: project.id,
+        name: project.name,
+        language: project.language,
+        files: project.files,
+      });
+    } catch (error) {
+      console.error("Error fetching shared project:", error);
+      res.status(500).json({ message: "Failed to fetch shared project" });
+    }
+  });
+
   app.get('/api/projects/:id/download', async (req: any, res) => {
     try {
       const project = await storage.getProject(req.params.id);
@@ -766,6 +1006,92 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error uploading files:", error);
       res.status(500).json({ message: "Failed to upload files" });
+    }
+  });
+
+  app.post('/api/projects/import-zip', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { zipData, projectName, language } = req.body;
+      
+      if (!zipData || typeof zipData !== 'string') {
+        return res.status(400).json({ message: "Missing or invalid ZIP data (expected base64 string)" });
+      }
+      
+      const zipBuffer = Buffer.from(zipData, 'base64');
+      const maxZipSize = 50 * 1024 * 1024;
+      if (zipBuffer.length > maxZipSize) {
+        return res.status(400).json({ message: "ZIP file too large. Maximum size is 50MB." });
+      }
+      
+      const zip = new AdmZip(zipBuffer);
+      const entries = zip.getEntries();
+      
+      const blacklistedExtensions = ['.exe', '.dll', '.so', '.dylib', '.bin'];
+      const blacklistedDirs = ['node_modules', '.git', '__pycache__', '.venv', 'venv', 'target', 'dist', 'build'];
+      
+      const buildFileTree = (): FileNode => {
+        const root: FileNode = { type: 'folder', name: 'root', children: [] };
+        
+        for (const entry of entries) {
+          if (entry.isDirectory) continue;
+          
+          const sanitizedPath = sanitizePath(entry.entryName);
+          if (!sanitizedPath) continue;
+          
+          const parts = sanitizedPath.split('/').filter(p => p);
+          if (parts.length === 0) continue;
+          
+          if (parts.some(part => blacklistedDirs.includes(part))) continue;
+          
+          const fileName = parts[parts.length - 1];
+          const ext = fileName.includes('.') ? '.' + fileName.split('.').pop()?.toLowerCase() : '';
+          if (blacklistedExtensions.includes(ext)) continue;
+          
+          let content = '';
+          try {
+            const buffer = entry.getData();
+            if (buffer.length <= 1024 * 1024) {
+              content = buffer.toString('utf-8');
+            } else {
+              content = '[File too large to preview]';
+            }
+          } catch (err) {
+            content = '[Binary or unreadable file]';
+          }
+          
+          let current = root;
+          for (let i = 0; i < parts.length - 1; i++) {
+            const folderName = parts[i];
+            let folder = current.children?.find(c => c.name === folderName && c.type === 'folder');
+            if (!folder) {
+              folder = { type: 'folder', name: folderName, children: [] };
+              current.children = current.children || [];
+              current.children.push(folder);
+            }
+            current = folder;
+          }
+          
+          current.children = current.children || [];
+          current.children.push({ type: 'file', name: fileName, content });
+        }
+        
+        return root;
+      };
+      
+      const files = buildFileTree();
+      
+      const project = await storage.createProject({
+        ownerId: userId,
+        name: projectName || 'Imported Project',
+        language: language || 'javascript',
+        files,
+      });
+      
+      res.status(201).json(project);
+    } catch (error) {
+      console.error("Error importing ZIP:", error);
+      res.status(500).json({ message: "Failed to import ZIP file" });
     }
   });
 

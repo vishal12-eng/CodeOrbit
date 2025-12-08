@@ -49,6 +49,8 @@ export const projects = pgTable("projects", {
   language: text("language").notNull().default("node-js"),
   files: jsonb("files").$type<FileNode>().notNull(),
   envVars: jsonb("env_vars").$type<EnvVars>().default({}),
+  shareToken: varchar("share_token", { length: 64 }),
+  shareEnabled: text("share_enabled").default("false"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

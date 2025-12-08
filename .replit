@@ -35,7 +35,7 @@ localPort = 39819
 externalPort = 3003
 
 [[ports]]
-localPort = 41351
+localPort = 42361
 externalPort = 5000
 
 [env]
@@ -65,3 +65,8 @@ waitForPort = 5000
 [agent]
 integrations = ["javascript_log_in_with_replit:1.0.0", "javascript_database:1.0.0", "javascript_openai:1.0.0", "javascript_anthropic:1.0.0"]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+ENCRYPTION_SECRET = "novacode-secure-encryption-key-prod-2024-128bit"
