@@ -397,3 +397,222 @@ export function getAvailableModels(): ModelConfig[] {
     }
   });
 }
+
+export type StreamCallback = (token: string, done: boolean) => void;
+
+async function streamWithOpenAI(
+  messages: ChatMessage[],
+  modelId: ModelId,
+  onToken: StreamCallback,
+  maxTokens: number = 4096
+): Promise<ModelResponse> {
+  const client = getOpenAIClient();
+  const modelName = getOpenAIModelName(modelId);
+  
+  const stream = await client.chat.completions.create({
+    model: modelName,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    max_tokens: maxTokens,
+    stream: true,
+  });
+
+  let fullContent = "";
+  let tokensUsed = 0;
+
+  for await (const chunk of stream) {
+    const token = chunk.choices[0]?.delta?.content || "";
+    if (token) {
+      fullContent += token;
+      onToken(token, false);
+    }
+    if (chunk.usage) {
+      tokensUsed = chunk.usage.total_tokens;
+    }
+  }
+
+  onToken("", true);
+
+  return {
+    content: fullContent,
+    model: modelName,
+    tokensUsed,
+  };
+}
+
+async function streamWithAnthropic(
+  messages: ChatMessage[],
+  modelId: ModelId,
+  onToken: StreamCallback,
+  maxTokens: number = 4096
+): Promise<ModelResponse> {
+  const client = getAnthropicClient();
+  const modelName = getAnthropicModelName(modelId);
+  
+  const systemMessage = messages.find(m => m.role === "system");
+  const nonSystemMessages = messages.filter(m => m.role !== "system");
+
+  const stream = await client.messages.stream({
+    model: modelName,
+    max_tokens: maxTokens,
+    system: systemMessage?.content || undefined,
+    messages: nonSystemMessages.map(m => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    })),
+  });
+
+  let fullContent = "";
+  let tokensUsed = 0;
+
+  for await (const event of stream) {
+    if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      const token = event.delta.text;
+      fullContent += token;
+      onToken(token, false);
+    }
+    if (event.type === "message_delta" && event.usage) {
+      tokensUsed = event.usage.output_tokens;
+    }
+  }
+
+  onToken("", true);
+
+  return {
+    content: fullContent,
+    model: modelName,
+    tokensUsed,
+  };
+}
+
+async function streamWithGemini(
+  messages: ChatMessage[],
+  modelId: ModelId,
+  onToken: StreamCallback,
+  maxTokens: number = 4096
+): Promise<ModelResponse> {
+  const client = getGeminiClient();
+  const modelName = getGeminiModelName(modelId);
+  
+  const systemMessage = messages.find(m => m.role === "system");
+  const nonSystemMessages = messages.filter(m => m.role !== "system");
+  
+  const contents = nonSystemMessages.map(m => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  const response = await client.models.generateContentStream({
+    model: modelName,
+    contents: contents,
+    config: {
+      systemInstruction: systemMessage?.content || undefined,
+      maxOutputTokens: maxTokens,
+    },
+  });
+
+  let fullContent = "";
+  let tokensUsed = 0;
+
+  for await (const chunk of response) {
+    const token = chunk.text || "";
+    if (token) {
+      fullContent += token;
+      onToken(token, false);
+    }
+    if (chunk.usageMetadata) {
+      tokensUsed = chunk.usageMetadata.totalTokenCount || 0;
+    }
+  }
+
+  onToken("", true);
+
+  return {
+    content: fullContent,
+    model: modelName,
+    tokensUsed,
+  };
+}
+
+async function streamWithGrok(
+  messages: ChatMessage[],
+  modelId: ModelId,
+  onToken: StreamCallback,
+  maxTokens: number = 4096
+): Promise<ModelResponse> {
+  const client = getGrokClient();
+  const modelName = getGrokModelName(modelId);
+  
+  const stream = await client.chat.completions.create({
+    model: modelName,
+    messages: messages.map(m => ({ role: m.role, content: m.content })),
+    max_tokens: maxTokens,
+    stream: true,
+  });
+
+  let fullContent = "";
+  let tokensUsed = 0;
+
+  for await (const chunk of stream) {
+    const token = chunk.choices[0]?.delta?.content || "";
+    if (token) {
+      fullContent += token;
+      onToken(token, false);
+    }
+    if (chunk.usage) {
+      tokensUsed = chunk.usage.total_tokens;
+    }
+  }
+
+  onToken("", true);
+
+  return {
+    content: fullContent,
+    model: modelName,
+    tokensUsed,
+  };
+}
+
+export async function streamWithModel(
+  messages: ChatMessage[],
+  modelId: ModelId = "gpt-4o",
+  onToken: StreamCallback,
+  maxTokens?: number
+): Promise<ModelResponse> {
+  const modelConfig = getModelConfig(modelId);
+  const tokens = maxTokens || modelConfig.maxOutputTokens;
+
+  try {
+    switch (modelConfig.type) {
+      case "openai":
+        return await streamWithOpenAI(messages, modelId, onToken, tokens);
+      case "anthropic":
+        return await streamWithAnthropic(messages, modelId, onToken, tokens);
+      case "gemini":
+        return await streamWithGemini(messages, modelId, onToken, tokens);
+      case "grok":
+        return await streamWithGrok(messages, modelId, onToken, tokens);
+      default:
+        return await streamWithOpenAI(messages, "gpt-4o", onToken, tokens);
+    }
+  } catch (error: any) {
+    if (modelConfig.type !== "openai" && process.env.OPENAI_API_KEY) {
+      console.warn(`${modelConfig.type} streaming failed, falling back to OpenAI:`, error.message);
+      return await streamWithOpenAI(messages, "gpt-4o", onToken, tokens);
+    }
+    throw error;
+  }
+}
+
+export async function generateStreamWithModel(
+  prompt: string,
+  systemPrompt: string,
+  modelId: ModelId = "gpt-4o",
+  onToken: StreamCallback,
+  maxTokens?: number
+): Promise<ModelResponse> {
+  const messages: ChatMessage[] = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: prompt },
+  ];
+  return streamWithModel(messages, modelId, onToken, maxTokens);
+}
