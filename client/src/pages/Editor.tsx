@@ -69,6 +69,7 @@ import SearchPanel from '@/components/editor/SearchPanel';
 import InlineSuggestion from '@/components/editor/InlineSuggestion';
 import AIPanel from '@/components/ai/AIPanel';
 import BuilderMode from '@/components/ai/BuilderMode';
+import Composer from '@/components/ai/Composer';
 import OneShotCreator from '@/components/ai/OneShotCreator';
 import PageTransition from '@/components/layout/PageTransition';
 import { useToast } from '@/hooks/use-toast';
@@ -235,6 +236,7 @@ export default function Editor() {
   const [serverLogs, setServerLogs] = useState<LogEntry[]>([]);
 
   const [isBuilderModeOpen, setIsBuilderModeOpen] = useState(false);
+  const [isComposerOpen, setIsComposerOpen] = useState(false);
   const [isOneShotOpen, setIsOneShotOpen] = useState(false);
 
   const [isInlineOpen, setIsInlineOpen] = useState(false);
@@ -633,6 +635,11 @@ export default function Editor() {
       if (modKey && e.key === 'k') {
         e.preventDefault();
         setIsTerminalOpen(true);
+      }
+
+      if (modKey && e.shiftKey && e.key === 'K') {
+        e.preventDefault();
+        setIsComposerOpen((prev) => !prev);
       }
     };
 
@@ -1360,6 +1367,29 @@ export default function Editor() {
               projectFiles={projectFiles}
               onApplyChanges={handleBuilderApplyChanges}
               onClose={() => setIsBuilderModeOpen(false)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {isComposerOpen && (
+        <Dialog open={isComposerOpen} onOpenChange={setIsComposerOpen}>
+          <DialogContent className="max-w-5xl h-[85vh] p-0 overflow-hidden">
+            <Composer
+              projectId={projectId}
+              openFiles={openTabs.map(t => t.path)}
+              currentFile={activeTab || undefined}
+              onApplyChanges={(changes) => {
+                changes.forEach((change) => {
+                  if (change.action !== 'delete' && project) {
+                    const updatedFiles = updateFileInTree(project.files, change.path, change.newContent);
+                    saveMutation.mutate(updatedFiles);
+                  }
+                });
+                queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+                setIsComposerOpen(false);
+              }}
+              onClose={() => setIsComposerOpen(false)}
             />
           </DialogContent>
         </Dialog>
