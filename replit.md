@@ -8,7 +8,32 @@ The platform includes **CodeWizard**, an embedded agentic AI assistant that unde
 
 ## Recent Changes (December 2025)
 
-### Phase 12: CodeWizard AI Assistant (Latest)
+### Phase 13: AI File Handler (Bolt/Cursor-like functionality)
+- **AI Handler Module**: New file operations API at `server/ai-handler.ts`
+  - `createFile(path, content)` - Create files with automatic directory creation
+  - `editFile(path, action, content, lineNum)` - Edit files (replace, append, insert_at_line)
+  - `deleteFile(path)` - Delete files
+  - `createFolder(path)` - Create folders recursively
+  - `deleteFolder(path)` - Delete folders with rimraf
+  - `listFiles(path)` - List directory contents
+  - `runCommand(cmd)` - Execute shell commands with security validation
+
+- **API Endpoints**:
+  - POST `/api/ai-handler/create-file` - Create new files
+  - POST `/api/ai-handler/edit-file` - Edit existing files
+  - POST `/api/ai-handler/delete-file` - Delete files
+  - POST `/api/ai-handler/create-folder` - Create folders
+  - POST `/api/ai-handler/delete-folder` - Delete folders
+  - GET `/api/ai-handler/list-files?path=` - List directory contents
+  - POST `/api/ai-handler/run-command` - Run shell commands
+
+- **Security Features**:
+  - Path sanitization to prevent directory traversal attacks
+  - Blocked access to sensitive files (node_modules, .git, .env)
+  - Command validation to block dangerous shell commands
+  - All paths constrained to project directory
+
+### Phase 12: CodeWizard AI Assistant
 - **CodeWizard Panel**: New AI assistant tab with agentic capabilities
   - Natural language support (English + Hinglish)
   - File operations: create, edit, delete, read files

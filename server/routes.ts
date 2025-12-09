@@ -1347,6 +1347,97 @@ export async function registerRoutes(
     }
   });
 
+  // AI Handler routes for file operations (like Bolt/Cursor)
+  const aiHandler = await import('./ai-handler');
+
+  app.post('/api/ai-handler/create-file', async (req: any, res) => {
+    try {
+      const { path, content } = req.body;
+      if (!path) {
+        return res.status(400).json({ error: "Path is required" });
+      }
+      const result = aiHandler.createFile(path, content || '');
+      res.json({ success: true, message: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ai-handler/edit-file', async (req: any, res) => {
+    try {
+      const { path, action, content, lineNum } = req.body;
+      if (!path || !action) {
+        return res.status(400).json({ error: "Path and action are required" });
+      }
+      const result = aiHandler.editFile(path, action, content || '', lineNum);
+      res.json({ success: true, message: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ai-handler/delete-file', async (req: any, res) => {
+    try {
+      const { path } = req.body;
+      if (!path) {
+        return res.status(400).json({ error: "Path is required" });
+      }
+      const result = aiHandler.deleteFile(path);
+      res.json({ success: true, message: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ai-handler/create-folder', async (req: any, res) => {
+    try {
+      const { path } = req.body;
+      if (!path) {
+        return res.status(400).json({ error: "Path is required" });
+      }
+      const result = aiHandler.createFolder(path);
+      res.json({ success: true, message: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ai-handler/delete-folder', async (req: any, res) => {
+    try {
+      const { path } = req.body;
+      if (!path) {
+        return res.status(400).json({ error: "Path is required" });
+      }
+      const result = aiHandler.deleteFolder(path);
+      res.json({ success: true, message: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get('/api/ai-handler/list-files', async (req: any, res) => {
+    try {
+      const path = req.query.path || '.';
+      const result = aiHandler.listFiles(path);
+      res.json({ success: true, files: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post('/api/ai-handler/run-command', async (req: any, res) => {
+    try {
+      const { command } = req.body;
+      if (!command) {
+        return res.status(400).json({ error: "Command is required" });
+      }
+      const result = await aiHandler.runCommand(command);
+      res.json({ success: true, output: result });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return httpServer;
 }
 
