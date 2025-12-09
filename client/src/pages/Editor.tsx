@@ -240,6 +240,11 @@ export default function Editor() {
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
   const [newItemPath, setNewItemPath] = useState('');
   const [newItemName, setNewItemName] = useState('');
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
+  const [renameItemPath, setRenameItemPath] = useState('');
+  const [renameItemName, setRenameItemName] = useState('');
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteItemPath, setDeleteItemPath] = useState('');
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false);
   const [filePickerQuery, setFilePickerQuery] = useState('');
 
@@ -642,37 +647,133 @@ export default function Editor() {
     setIsNewFolderDialogOpen(true);
   };
 
-  const handleConfirmNewFile = () => {
+  const handleConfirmNewFile = async () => {
     if (!newItemName.trim() || !project) return;
     const fileName = newItemName.includes('.') ? newItemName : `${newItemName}.js`;
-    toast({
-      title: 'File created',
-      description: `"${fileName}" has been created.`,
-    });
+    const basePath = newItemPath.replace(/^\/root\/?/, '');
+    const filePath = basePath ? `${basePath}/${fileName}` : fileName;
+    
+    try {
+      await apiRequest('POST', `/api/projects/${projectId}/files`, {
+        path: filePath,
+        content: '',
+      });
+      toast({
+        title: 'File created',
+        description: `"${fileName}" has been created.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create file',
+        variant: 'destructive',
+      });
+    }
     setIsNewFileDialogOpen(false);
+    setNewItemName('');
   };
 
-  const handleConfirmNewFolder = () => {
+  const handleConfirmNewFolder = async () => {
     if (!newItemName.trim() || !project) return;
-    toast({
-      title: 'Folder created',
-      description: `"${newItemName}" has been created.`,
-    });
+    const basePath = newItemPath.replace(/^\/root\/?/, '');
+    const folderPath = basePath ? `${basePath}/${newItemName}` : newItemName;
+    
+    try {
+      await apiRequest('POST', `/api/projects/${projectId}/folders`, {
+        path: folderPath,
+      });
+      toast({
+        title: 'Folder created',
+        description: `"${newItemName}" has been created.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create folder',
+        variant: 'destructive',
+      });
+    }
     setIsNewFolderDialogOpen(false);
+    setNewItemName('');
   };
 
   const handleRenameItem = (path: string) => {
-    toast({
-      title: 'Rename',
-      description: 'Rename functionality would open here.',
-    });
+    setRenameItemPath(path);
+    const itemName = path.split('/').pop() || '';
+    setRenameItemName(itemName);
+    setIsRenameDialogOpen(true);
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renameItemName.trim() || !renameItemPath) return;
+    
+    const oldPath = renameItemPath.replace(/^\/root\/?/, '');
+    const pathParts = oldPath.split('/');
+    pathParts[pathParts.length - 1] = renameItemName;
+    const newPath = pathParts.join('/');
+    
+    try {
+      await apiRequest('PUT', `/api/projects/${projectId}/files/rename`, {
+        oldPath,
+        newPath,
+      });
+      
+      toast({
+        title: 'Renamed',
+        description: `Renamed to "${renameItemName}"`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to rename',
+        variant: 'destructive',
+      });
+    }
+    setIsRenameDialogOpen(false);
+    setRenameItemName('');
+    setRenameItemPath('');
   };
 
   const handleDeleteItem = (path: string) => {
-    toast({
-      title: 'Delete',
-      description: 'Delete confirmation would open here.',
-    });
+    setDeleteItemPath(path);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteItemPath) return;
+    
+    const itemPath = deleteItemPath.replace(/^\/root\/?/, '');
+    const hasExtension = /\.[^/.]+$/.test(itemPath.split('/').pop() || '');
+    
+    try {
+      if (hasExtension) {
+        await apiRequest('DELETE', `/api/projects/${projectId}/files?path=${encodeURIComponent(itemPath)}`);
+      } else {
+        await apiRequest('DELETE', `/api/projects/${projectId}/folders?path=${encodeURIComponent(itemPath)}`);
+      }
+      
+      const tabToClose = openTabs.find(t => t.path.includes(itemPath));
+      if (tabToClose) {
+        handleTabClose(tabToClose.path);
+      }
+      
+      toast({
+        title: 'Deleted',
+        description: `"${deleteItemPath.split('/').pop()}" has been deleted.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/projects', projectId] });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete',
+        variant: 'destructive',
+      });
+    }
+    setIsDeleteDialogOpen(false);
+    setDeleteItemPath('');
   };
 
   const handleApplyAICode = (code: string) => {
@@ -1129,6 +1230,53 @@ export default function Editor() {
               Cancel
             </Button>
             <Button onClick={handleConfirmNewFolder}>Create</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="renameName">New Name</Label>
+            <Input
+              id="renameName"
+              value={renameItemName}
+              onChange={(e) => setRenameItemName(e.target.value)}
+              placeholder="newname.js"
+              className="mt-2"
+              onKeyDown={(e) => e.key === 'Enter' && handleConfirmRename()}
+              data-testid="input-rename"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmRename} data-testid="button-confirm-rename">Rename</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete "{deleteItemPath.split('/').pop()}"? This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete} data-testid="button-confirm-delete">
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

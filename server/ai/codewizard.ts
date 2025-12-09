@@ -317,6 +317,121 @@ Remember to respond with valid JSON following the specified format.
   }
 });
 
+router.post("/chat/stream", async (req: Request, res: Response) => {
+  try {
+    const {
+      message,
+      projectPath,
+      currentFile,
+      projectContext,
+      conversationHistory,
+      model,
+    } = req.body as CodeWizardRequest;
+
+    if (!message || typeof message !== "string") {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const resolvedPath = projectPath || process.cwd();
+    const modelId: ModelId = model || "gemini-2.5-flash";
+
+    const projectFiles = await listFiles(resolvedPath);
+    const projectStructure = projectFiles.slice(0, 50).join("\n");
+    
+    let fileContext = "";
+    if (currentFile) {
+      fileContext = `\n\nCurrently open file: ${currentFile.path}\n\`\`\`${currentFile.language}\n${currentFile.content}\n\`\`\``;
+    }
+
+    const relevantContents = await getRelevantFileContents(resolvedPath, projectFiles, 5);
+
+    const prompt = `
+User Request: ${message}
+
+Project Structure:
+${projectStructure}
+
+${projectContext ? `Project Context:\n${projectContext}\n` : ""}
+${fileContext}
+
+${relevantContents ? `\nRelevant File Contents:\n${relevantContents}` : ""}
+
+Please analyze the request and provide a complete response with any necessary file actions.
+Remember to respond with valid JSON following the specified format.
+`;
+
+    const messages: ChatMessage[] = [
+      { role: "system", content: CODEWIZARD_SYSTEM_PROMPT },
+    ];
+
+    if (conversationHistory && Array.isArray(conversationHistory)) {
+      for (const msg of conversationHistory.slice(-10)) {
+        messages.push({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+        });
+      }
+    }
+
+    messages.push({ role: "user", content: prompt });
+
+    let fullContent = "";
+
+    res.write(`data: ${JSON.stringify({ type: "start", model: modelId })}\n\n`);
+
+    await streamWithModel(messages, modelId, (token, done) => {
+      fullContent += token;
+      if (token) {
+        res.write(`data: ${JSON.stringify({ type: "token", content: token })}\n\n`);
+      }
+      if (done) {
+        let wizardResponse: CodeWizardResponse;
+        try {
+          const jsonMatch = fullContent.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            wizardResponse = {
+              summary: parsed.summary || "Analyzed your request",
+              thinking: parsed.thinking,
+              fileActions: parsed.fileActions || [],
+              message: parsed.message || fullContent,
+              nextSteps: parsed.nextSteps || [],
+              codeBlocks: parsed.codeBlocks,
+            };
+          } else {
+            wizardResponse = {
+              summary: "Response from CodeWizard",
+              fileActions: [],
+              message: fullContent,
+              nextSteps: [],
+            };
+          }
+        } catch (e) {
+          wizardResponse = {
+            summary: "Response from CodeWizard",
+            fileActions: [],
+            message: fullContent,
+            nextSteps: [],
+          };
+        }
+
+        res.write(`data: ${JSON.stringify({ type: "complete", ...wizardResponse, model: modelId })}\n\n`);
+        res.end();
+      }
+    });
+
+  } catch (error: any) {
+    console.error("CodeWizard stream error:", error);
+    res.write(`data: ${JSON.stringify({ type: "error", error: error.message })}\n\n`);
+    res.end();
+  }
+});
+
 router.post("/apply", async (req: Request, res: Response) => {
   try {
     const { fileActions, projectPath } = req.body as {

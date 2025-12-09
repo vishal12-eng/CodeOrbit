@@ -26,7 +26,8 @@ const RATE_LIMIT_MAX_REQUESTS = 30;
 
 setInterval(() => {
   const now = Date.now();
-  for (const [key, entry] of rateLimitMap.entries()) {
+  const entries = Array.from(rateLimitMap.entries());
+  for (const [key, entry] of entries) {
     if (now > entry.resetTime) {
       rateLimitMap.delete(key);
     }
@@ -83,6 +84,120 @@ function countFiles(node: FileNode): number {
     return node.children.reduce((sum, child) => sum + countFiles(child), 0);
   }
   return 0;
+}
+
+function addFileToTree(root: FileNode, filePath: string, content: string): FileNode {
+  const cloned = JSON.parse(JSON.stringify(root)) as FileNode;
+  const parts = filePath.split('/').filter(Boolean);
+  const fileName = parts.pop();
+  if (!fileName) return cloned;
+
+  let current = cloned;
+  for (const part of parts) {
+    if (current.type !== 'folder' || !current.children) {
+      current.children = [];
+    }
+    let child = current.children.find(c => c.name === part && c.type === 'folder');
+    if (!child) {
+      child = { name: part, type: 'folder', children: [] };
+      current.children.push(child);
+    }
+    current = child;
+  }
+
+  if (!current.children) current.children = [];
+  const existing = current.children.find(c => c.name === fileName);
+  if (existing) {
+    throw new Error(`File "${fileName}" already exists`);
+  }
+  current.children.push({ name: fileName, type: 'file', content });
+  return cloned;
+}
+
+function addFolderToTree(root: FileNode, folderPath: string): FileNode {
+  const cloned = JSON.parse(JSON.stringify(root)) as FileNode;
+  const parts = folderPath.split('/').filter(Boolean);
+  if (parts.length === 0) return cloned;
+
+  let current = cloned;
+  for (const part of parts) {
+    if (current.type !== 'folder') {
+      throw new Error(`Cannot create folder inside a file`);
+    }
+    if (!current.children) current.children = [];
+    let child = current.children.find(c => c.name === part);
+    if (child) {
+      if (child.type !== 'folder') {
+        throw new Error(`"${part}" is a file, not a folder`);
+      }
+    } else {
+      child = { name: part, type: 'folder', children: [] };
+      current.children.push(child);
+    }
+    current = child;
+  }
+  return cloned;
+}
+
+function deleteFromTree(root: FileNode, itemPath: string): FileNode {
+  const cloned = JSON.parse(JSON.stringify(root)) as FileNode;
+  const parts = itemPath.split('/').filter(Boolean);
+  const itemName = parts.pop();
+  if (!itemName) return cloned;
+
+  let current = cloned;
+  for (const part of parts) {
+    if (current.type !== 'folder' || !current.children) {
+      throw new Error(`Path not found: ${itemPath}`);
+    }
+    const child = current.children.find(c => c.name === part && c.type === 'folder');
+    if (!child) {
+      throw new Error(`Path not found: ${itemPath}`);
+    }
+    current = child;
+  }
+
+  if (!current.children) {
+    throw new Error(`Item not found: ${itemPath}`);
+  }
+  const idx = current.children.findIndex(c => c.name === itemName);
+  if (idx === -1) {
+    throw new Error(`Item not found: ${itemPath}`);
+  }
+  current.children.splice(idx, 1);
+  return cloned;
+}
+
+function renameInTree(root: FileNode, oldPath: string, newName: string): FileNode {
+  const cloned = JSON.parse(JSON.stringify(root)) as FileNode;
+  const parts = oldPath.split('/').filter(Boolean);
+  const oldName = parts.pop();
+  if (!oldName) return cloned;
+
+  let current = cloned;
+  for (const part of parts) {
+    if (current.type !== 'folder' || !current.children) {
+      throw new Error(`Path not found: ${oldPath}`);
+    }
+    const child = current.children.find(c => c.name === part && c.type === 'folder');
+    if (!child) {
+      throw new Error(`Path not found: ${oldPath}`);
+    }
+    current = child;
+  }
+
+  if (!current.children) {
+    throw new Error(`Item not found: ${oldPath}`);
+  }
+  const item = current.children.find(c => c.name === oldName);
+  if (!item) {
+    throw new Error(`Item not found: ${oldPath}`);
+  }
+  if (current.children.some(c => c.name === newName && c !== item)) {
+    throw new Error(`An item named "${newName}" already exists`);
+  }
+  item.name = newName;
+  return cloned;
 }
 
 export async function registerRoutes(
@@ -211,6 +326,139 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error deleting project:", error);
       res.status(500).json({ message: "Failed to delete project" });
+    }
+  });
+
+  app.post('/api/projects/:id/files', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { path, content = '' } = req.body;
+      if (!path || typeof path !== 'string') {
+        return res.status(400).json({ message: "Invalid path: must be a non-empty string" });
+      }
+
+      const sanitized = sanitizePath(path);
+      if (!sanitized) {
+        return res.status(400).json({ message: "Invalid path" });
+      }
+
+      const updatedFiles = addFileToTree(project.files, sanitized, content);
+      const updated = await storage.updateProject(req.params.id, { files: updatedFiles });
+      res.status(201).json(updated);
+    } catch (error: any) {
+      console.error("Error creating file:", error);
+      res.status(400).json({ message: error.message || "Failed to create file" });
+    }
+  });
+
+  app.post('/api/projects/:id/folders', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { path } = req.body;
+      if (!path || typeof path !== 'string') {
+        return res.status(400).json({ message: "Invalid path: must be a non-empty string" });
+      }
+
+      const sanitized = sanitizePath(path);
+      if (!sanitized) {
+        return res.status(400).json({ message: "Invalid path" });
+      }
+
+      const updatedFiles = addFolderToTree(project.files, sanitized);
+      const updated = await storage.updateProject(req.params.id, { files: updatedFiles });
+      res.status(201).json(updated);
+    } catch (error: any) {
+      console.error("Error creating folder:", error);
+      res.status(400).json({ message: error.message || "Failed to create folder" });
+    }
+  });
+
+  app.put('/api/projects/:id/files/rename', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { oldPath, newName } = req.body;
+      if (!oldPath || typeof oldPath !== 'string') {
+        return res.status(400).json({ message: "Invalid oldPath: must be a non-empty string" });
+      }
+      if (!newName || typeof newName !== 'string') {
+        return res.status(400).json({ message: "Invalid newName: must be a non-empty string" });
+      }
+
+      const sanitizedOld = sanitizePath(oldPath);
+      if (!sanitizedOld) {
+        return res.status(400).json({ message: "Invalid oldPath" });
+      }
+
+      const updatedFiles = renameInTree(project.files, sanitizedOld, newName);
+      const updated = await storage.updateProject(req.params.id, { files: updatedFiles });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error renaming item:", error);
+      res.status(400).json({ message: error.message || "Failed to rename item" });
+    }
+  });
+
+  app.delete('/api/projects/:id/files', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { path } = req.body;
+      if (!path || typeof path !== 'string') {
+        return res.status(400).json({ message: "Invalid path: must be a non-empty string" });
+      }
+
+      const sanitized = sanitizePath(path);
+      if (!sanitized) {
+        return res.status(400).json({ message: "Invalid path" });
+      }
+
+      const updatedFiles = deleteFromTree(project.files, sanitized);
+      const updated = await storage.updateProject(req.params.id, { files: updatedFiles });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error deleting file:", error);
+      res.status(400).json({ message: error.message || "Failed to delete file" });
+    }
+  });
+
+  app.delete('/api/projects/:id/folders', async (req: any, res) => {
+    try {
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+
+      const { path } = req.body;
+      if (!path || typeof path !== 'string') {
+        return res.status(400).json({ message: "Invalid path: must be a non-empty string" });
+      }
+
+      const sanitized = sanitizePath(path);
+      if (!sanitized) {
+        return res.status(400).json({ message: "Invalid path" });
+      }
+
+      const updatedFiles = deleteFromTree(project.files, sanitized);
+      const updated = await storage.updateProject(req.params.id, { files: updatedFiles });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error deleting folder:", error);
+      res.status(400).json({ message: error.message || "Failed to delete folder" });
     }
   });
 

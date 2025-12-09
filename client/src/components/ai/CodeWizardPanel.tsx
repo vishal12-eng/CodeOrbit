@@ -331,6 +331,7 @@ export default function CodeWizardPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelId>("gemini-2.5-flash");
   const [applyingChanges, setApplyingChanges] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -351,8 +352,12 @@ export default function CodeWizardPanel({
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const userInput = input.trim();
     setInput("");
     setIsLoading(true);
+    setStreamingContent("");
+
+    const assistantMessageId = `assistant-${Date.now()}`;
 
     try {
       const conversationHistory = messages.map(m => ({
@@ -360,37 +365,98 @@ export default function CodeWizardPanel({
         content: m.content,
       }));
 
-      const response = await apiRequest("POST", "/api/codewizard/chat", {
-        message: input.trim(),
-        currentFile,
-        projectContext,
-        conversationHistory,
-        model: selectedModel,
+      const response = await fetch("/api/codewizard/chat/stream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userInput,
+          currentFile,
+          projectContext,
+          conversationHistory,
+          model: selectedModel,
+        }),
       });
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error("Failed to connect to CodeWizard");
+      }
 
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error("No response stream available");
+      }
+
+      const decoder = new TextDecoder();
+      let accumulated = "";
+
+      // Add placeholder message for streaming
+      setMessages(prev => [...prev, {
+        id: assistantMessageId,
         role: "assistant",
-        content: data.message || "I've processed your request.",
+        content: "",
         timestamp: new Date(),
-        fileActions: data.fileActions,
-        codeBlocks: data.codeBlocks,
-        nextSteps: data.nextSteps,
-        thinking: data.thinking,
-        summary: data.summary,
-      };
+      }]);
 
-      setMessages(prev => [...prev, assistantMessage]);
+      let streamComplete = false;
+      
+      while (!streamComplete) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "token") {
+                accumulated += data.content;
+                setStreamingContent(accumulated);
+                setMessages(prev => prev.map(m => 
+                  m.id === assistantMessageId 
+                    ? { ...m, content: accumulated }
+                    : m
+                ));
+              } else if (data.type === "complete") {
+                setMessages(prev => prev.map(m => 
+                  m.id === assistantMessageId 
+                    ? {
+                        ...m,
+                        content: data.message || accumulated,
+                        fileActions: data.fileActions,
+                        codeBlocks: data.codeBlocks,
+                        nextSteps: data.nextSteps,
+                        thinking: data.thinking,
+                        summary: data.summary,
+                      }
+                    : m
+                ));
+                streamComplete = true;
+                reader.cancel();
+                break;
+              } else if (data.type === "error") {
+                throw new Error(data.error);
+              }
+            } catch (parseError) {
+              if (parseError instanceof Error && parseError.message !== "Unexpected end of JSON input") {
+                throw parseError;
+              }
+            }
+          }
+        }
+      }
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "Failed to get response from CodeWizard",
         variant: "destructive",
       });
+      setMessages(prev => prev.filter(m => m.id !== assistantMessageId));
     } finally {
       setIsLoading(false);
+      setStreamingContent("");
     }
   };
 
@@ -577,10 +643,16 @@ export default function CodeWizardPanel({
                   onViewFile={onOpenFile}
                 />
               ))}
-              {isLoading && (
+              {isLoading && !streamingContent && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin text-violet-500" />
                   <span className="text-sm">CodeWizard is thinking...</span>
+                </div>
+              )}
+              {isLoading && streamingContent && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Sparkles className="h-4 w-4 text-violet-500 animate-pulse" />
+                  <span className="text-sm">Streaming response...</span>
                 </div>
               )}
             </div>
