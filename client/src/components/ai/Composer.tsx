@@ -319,11 +319,20 @@ export default function Composer({
                   <Icon className="h-3 w-3" />
                 )}
                 <span>{config.label}</span>
-                {timings[p.replace("ing", "")] && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {(timings[p.replace("ing", "")] / 1000).toFixed(1)}s
-                  </span>
-                )}
+                {(() => {
+                  const timingKeyMap: Record<string, string> = {
+                    scanning: "scan",
+                    planning: "plan",
+                    generating: "generate",
+                    ready: "ready",
+                  };
+                  const timingKey = timingKeyMap[p];
+                  return timings[timingKey] ? (
+                    <span className="text-[10px] text-muted-foreground">
+                      {(timings[timingKey] / 1000).toFixed(1)}s
+                    </span>
+                  ) : null;
+                })()}
               </div>
             </div>
           );
@@ -524,14 +533,20 @@ export default function Composer({
             </div>
           )}
 
-          {phase === "generating" && streamingContent && fileChanges.length === 0 && (
+          {((phase === "generating" || phase === "ready") && streamingContent && fileChanges.length === 0) && (
             <Card>
               <CardContent className="py-3">
                 <div className="flex items-center gap-2 mb-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
-                  <span className="text-sm font-medium">Generating...</span>
+                  {phase === "generating" ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  )}
+                  <span className="text-sm font-medium">
+                    {phase === "generating" ? "Generating..." : "Generated Response"}
+                  </span>
                 </div>
-                <pre className="text-xs bg-muted/50 p-2 rounded-md overflow-x-auto max-h-48 overflow-y-auto">
+                <pre className="text-xs bg-muted/50 p-2 rounded-md overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap">
                   {streamingContent}
                 </pre>
               </CardContent>
@@ -577,6 +592,24 @@ export default function Composer({
               >
                 <Check className="h-4 w-4" />
                 Apply All ({fileChanges.length} files)
+              </Button>
+            </>
+          )}
+          
+          {phase === "ready" && fileChanges.length === 0 && streamingContent && (
+            <>
+              <div className="flex-1" />
+              <Button
+                onClick={() => {
+                  setPhase("idle");
+                  setPlan([]);
+                  setStreamingContent("");
+                }}
+                className="gap-2"
+                data-testid="button-composer-done"
+              >
+                <Check className="h-4 w-4" />
+                Done
               </Button>
             </>
           )}
