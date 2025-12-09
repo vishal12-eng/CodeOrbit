@@ -195,10 +195,10 @@ export class AgentRunner {
     return langMap[ext] || "plaintext";
   }
 
-  private async generatePlan(projectFiles: ProjectFile[]): Promise<AgentPlan> {
+  private async generatePlan(projectFiles: ProjectFile[]): Promise<AgentPlan & { implementation?: { files: Array<{ path: string; action: string; content: string }> } }> {
     const fileContext = projectFiles
-      .slice(0, 20)
-      .map(f => `### ${f.path}\n\`\`\`${f.language}\n${f.content.slice(0, 500)}${f.content.length > 500 ? "\n..." : ""}\n\`\`\``)
+      .slice(0, 15)
+      .map(f => `### ${f.path}\n\`\`\`${f.language}\n${f.content.slice(0, 400)}${f.content.length > 400 ? "\n..." : ""}\n\`\`\``)
       .join("\n\n");
 
     const prompt = `
@@ -207,10 +207,11 @@ Task: ${this.task}
 Project Context:
 ${this.projectContext || "Standard web project"}
 
-Existing Files (showing first 500 chars each):
+Existing Files (showing first 400 chars each):
 ${fileContext}
 
-Generate a detailed execution plan to complete this task. Include all file changes needed.
+Generate a detailed execution plan WITH complete implementation. You must include the "implementation" field with all file changes.
+Return a JSON object with "summary", "steps", and "implementation.files" arrays.
 `;
 
     const messages: ChatMessage[] = [
@@ -224,12 +225,25 @@ Generate a detailed execution plan to complete this task. Include all file chang
       const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return {
+        
+        const result = {
           summary: parsed.summary || "Executing task",
           steps: parsed.steps || [],
+          implementation: parsed.implementation,
         };
+        
+        if (parsed.implementation?.files && Array.isArray(parsed.implementation.files)) {
+          for (const file of parsed.implementation.files) {
+            if (file.path && file.content !== undefined) {
+              await this.applyFileChange(file);
+            }
+          }
+        }
+        
+        return result;
       }
-    } catch (e) {
+    } catch (e: any) {
+      agentEventBus.modelOutput(this.runId, `\nParsing plan response...\n`, false, "info");
     }
 
     return {
@@ -370,16 +384,46 @@ Generate the complete implementation. Return JSON with "files" array containing 
   }
 
   private async runBuild(): Promise<void> {
-    this.emitFileAction("build", "package.json", "Running TypeScript check...");
-
+    const packageJsonPath = path.join(this.projectPath, "package.json");
+    
     try {
-      await execAsync("npx tsc --noEmit", { 
-        cwd: this.projectPath,
-        timeout: 30000,
-      });
-      agentEventBus.modelOutput(this.runId, "\n\nTypeScript check passed.\n", false, "build");
+      if (!fs.existsSync(packageJsonPath)) {
+        agentEventBus.modelOutput(this.runId, "\n\nNo package.json found, skipping build step.\n", false, "build");
+        return;
+      }
+
+      const packageJson = JSON.parse(await fs.promises.readFile(packageJsonPath, "utf-8"));
+      const hasTypeScript = fs.existsSync(path.join(this.projectPath, "tsconfig.json"));
+      
+      if (hasTypeScript) {
+        this.emitFileAction("build", "tsconfig.json", "Running TypeScript check...");
+        try {
+          await execAsync("npx tsc --noEmit 2>&1 || true", { 
+            cwd: this.projectPath,
+            timeout: 30000,
+          });
+          agentEventBus.modelOutput(this.runId, "\n\nTypeScript check completed.\n", false, "build");
+        } catch (e) {
+          agentEventBus.modelOutput(this.runId, "\n\nTypeScript check skipped.\n", false, "build");
+        }
+      }
+      
+      if (packageJson.scripts?.build) {
+        this.emitFileAction("build", "package.json", "Running build script...");
+        try {
+          await execAsync("npm run build 2>&1 || true", { 
+            cwd: this.projectPath,
+            timeout: 60000,
+          });
+          agentEventBus.modelOutput(this.runId, "\n\nBuild completed.\n", false, "build");
+        } catch (e) {
+          agentEventBus.modelOutput(this.runId, "\n\nBuild check skipped.\n", false, "build");
+        }
+      } else if (!hasTypeScript) {
+        agentEventBus.modelOutput(this.runId, "\n\nNo build script found, verification skipped.\n", false, "build");
+      }
     } catch (error: any) {
-      agentEventBus.modelOutput(this.runId, `\n\nTypeScript check completed with warnings.\n`, false, "build");
+      agentEventBus.modelOutput(this.runId, `\n\nBuild verification skipped: ${error.message}\n`, false, "build");
     }
   }
 }

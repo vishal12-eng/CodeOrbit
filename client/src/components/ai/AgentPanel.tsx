@@ -260,7 +260,7 @@ export default function AgentPanel({ projectContext, onFileChange }: AgentPanelP
     if (!input.trim() || isRunning) return;
     const task = input.trim();
     setInput("");
-    await startAgent(task, projectContext);
+    await startAgent(task, projectContext, "gemini-1.5-pro");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

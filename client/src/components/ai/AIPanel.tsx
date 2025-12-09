@@ -15,6 +15,7 @@ import {
   Zap,
   Bot,
   StopCircle,
+  Cpu,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,6 +40,7 @@ import { AIHeader } from "./AIHeader";
 import { ActionList } from "./ActionList";
 import { AIProgressBubble } from "./AIProgressBubble";
 import { useSSEChat } from "@/hooks/useSSEChat";
+import AgentPanel from "./AgentPanel";
 import type { StructuredAIResponse, FileAction, StreamThinkingEvent } from "@shared/aiSchema";
 
 interface Message {
@@ -60,7 +62,7 @@ interface AIPanelProps {
 }
 
 type AIMode = "chat" | "edit" | "builder" | "debug" | "tests" | "docs";
-type PanelMode = "chat" | "builder";
+type PanelMode = "chat" | "builder" | "agent";
 
 type ModelId = 
   | "gpt-4o"
@@ -460,14 +462,18 @@ export default function AIPanel({
 
       <div className="px-3 py-2 border-b bg-muted/20">
         <Tabs value={panelMode} onValueChange={(v) => setPanelMode(v as PanelMode)}>
-          <TabsList className="h-8 w-full">
-            <TabsTrigger value="chat" className="flex-1 gap-1.5 text-xs" data-testid="tab-chat-mode">
+          <TabsList className="h-8 w-full grid grid-cols-3">
+            <TabsTrigger value="chat" className="gap-1.5 text-xs" data-testid="tab-chat-mode">
               <MessageSquare className="h-3.5 w-3.5" />
               Chat
             </TabsTrigger>
-            <TabsTrigger value="builder" className="flex-1 gap-1.5 text-xs" data-testid="tab-builder-mode">
+            <TabsTrigger value="builder" className="gap-1.5 text-xs" data-testid="tab-builder-mode">
               <Wand2 className="h-3.5 w-3.5" />
               Builder
+            </TabsTrigger>
+            <TabsTrigger value="agent" className="gap-1.5 text-xs" data-testid="tab-agent-mode">
+              <Cpu className="h-3.5 w-3.5" />
+              Agent
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -521,26 +527,30 @@ export default function AIPanel({
         )}
       </div>
 
-      <ScrollArea className="flex-1" ref={scrollRef}>
-        <div className="p-3 space-y-3">
-          {messages.length === 0 && (
-            <div className="text-center text-muted-foreground py-12">
-              <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">Start a conversation</p>
-              <p className="text-xs mt-1 text-muted-foreground/70">
-                Mode: <span className={panelMode === "builder" ? "text-purple-500" : modeConfig[mode].color}>
-                  {panelMode === "builder" ? "Builder" : modeConfig[mode].label}
-                </span>
-                {" | "}
-                Model: <span className={currentModel ? modelTypeColors[currentModel.type] : ""}>{currentModel?.name || "GPT-4o"}</span>
-              </p>
-              {panelMode === "builder" && (
-                <p className="text-xs mt-2 text-muted-foreground/50 max-w-[200px] mx-auto">
-                  Builder mode uses structured AI responses with file actions and organized sections
+      {panelMode === "agent" ? (
+        <AgentPanel projectContext={projectContext} />
+      ) : (
+        <>
+        <ScrollArea className="flex-1" ref={scrollRef}>
+          <div className="p-3 space-y-3">
+            {messages.length === 0 && (
+              <div className="text-center text-muted-foreground py-12">
+                <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                <p className="text-sm font-medium">Start a conversation</p>
+                <p className="text-xs mt-1 text-muted-foreground/70">
+                  Mode: <span className={panelMode === "builder" ? "text-purple-500" : modeConfig[mode].color}>
+                    {panelMode === "builder" ? "Builder" : modeConfig[mode].label}
+                  </span>
+                  {" | "}
+                  Model: <span className={currentModel ? modelTypeColors[currentModel.type] : ""}>{currentModel?.name || "GPT-4o"}</span>
                 </p>
-              )}
-            </div>
-          )}
+                {panelMode === "builder" && (
+                  <p className="text-xs mt-2 text-muted-foreground/50 max-w-[200px] mx-auto">
+                    Builder mode uses structured AI responses with file actions and organized sections
+                  </p>
+                )}
+              </div>
+            )}
           {messages.map((message) => (
             <div key={message.id}>
               {message.role === "user" ? (
@@ -762,6 +772,8 @@ export default function AIPanel({
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
