@@ -8,6 +8,31 @@ The platform includes **CodeWizard**, an embedded agentic AI assistant that unde
 
 ## Recent Changes (December 2025)
 
+### Phase 14: Keyboard Shortcuts & Inline AI Suggestions (Cursor/Trae-like workflows)
+- **Keyboard Shortcuts**: Added Cursor/Trae-style keyboard bindings
+  - `Cmd/Ctrl+I`: Toggle inline AI composer overlay
+  - `Cmd/Ctrl+U`: Toggle AI sidebar panel
+  - `Cmd/Ctrl+.`: Open builder/agent mode
+  - `Cmd/Ctrl+K`: Focus terminal with AI assist mode
+
+- **InlineSuggestion Component**: New overlay at cursor position
+  - Input field for AI prompts with @file/@code autocomplete
+  - Tab key to accept suggestions
+  - AI-generated code with glow effect styling
+  - Framer Motion animations
+
+- **Terminal AI Mode**: Natural language to bash conversion
+  - Toggle with Cmd+K
+  - INSERT mode: AI converts NL to command, user executes
+  - RUN mode: AI converts and executes immediately
+  - Visual indicators (purple theme for AI mode)
+
+- **Status Bar**: Bottom bar showing AI status
+  - Agent Ready indicator with pulse animation
+  - Current AI model name
+  - File count in project
+  - Keyboard shortcut hints
+
 ### Phase 13: AI File Handler (Bolt/Cursor-like functionality)
 - **AI Handler Module**: New file operations API at `server/ai-handler.ts`
   - `createFile(path, content)` - Create files with automatic directory creation
