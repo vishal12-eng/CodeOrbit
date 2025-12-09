@@ -603,7 +603,11 @@ export default function Composer({
                 onClick={() => {
                   setPhase("idle");
                   setPlan([]);
+                  setFileChanges([]);
                   setStreamingContent("");
+                  setPrompt("");
+                  setContext(null);
+                  setTimings({});
                 }}
                 className="gap-2"
                 data-testid="button-composer-done"
