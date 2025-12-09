@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProjectSchema, insertApiKeySchema, apiKeyProviderEnum, type FileNode, type ApiKeyProvider } from "@shared/schema";
 import aiRoutes from "./ai/routes";
+import agentRoutes from "./ai/agentRoutes";
 import { isAuthenticated } from "./replitAuth";
 import { 
   runProject, 
@@ -88,6 +89,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   app.use('/api/ai', aiRoutes);
+  app.use('/api/agent', agentRoutes);
 
   app.post('/api/format', async (req: any, res) => {
     try {
