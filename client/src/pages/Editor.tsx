@@ -66,6 +66,7 @@ import Terminal, { TerminalToggle } from '@/components/editor/Terminal';
 import WebPreview from '@/components/editor/WebPreview';
 import GitPanel from '@/components/editor/GitPanel';
 import SearchPanel from '@/components/editor/SearchPanel';
+import InlineSuggestion from '@/components/editor/InlineSuggestion';
 import AIPanel from '@/components/ai/AIPanel';
 import BuilderMode from '@/components/ai/BuilderMode';
 import OneShotCreator from '@/components/ai/OneShotCreator';
@@ -235,6 +236,10 @@ export default function Editor() {
 
   const [isBuilderModeOpen, setIsBuilderModeOpen] = useState(false);
   const [isOneShotOpen, setIsOneShotOpen] = useState(false);
+
+  const [isInlineOpen, setIsInlineOpen] = useState(false);
+  const [inlinePosition, setInlinePosition] = useState<{ line: number; column: number; top: number; left: number }>({ line: 1, column: 1, top: 50, left: 50 });
+  const [selectedAIModel, setSelectedAIModel] = useState<string>('gpt-4o');
 
   const [isNewFileDialogOpen, setIsNewFileDialogOpen] = useState(false);
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
@@ -606,11 +611,34 @@ export default function Editor() {
         setIsFilePickerOpen(true);
         setFilePickerQuery('');
       }
+
+      if (modKey && e.key === 'i') {
+        e.preventDefault();
+        setIsInlineOpen((prev) => !prev);
+        if (!isInlineOpen) {
+          setInlinePosition({ line: 1, column: 1, top: 100, left: 100 });
+        }
+      }
+
+      if (modKey && e.key === 'u') {
+        e.preventDefault();
+        setIsAIPanelOpen((prev) => !prev);
+      }
+
+      if (modKey && e.key === '.') {
+        e.preventDefault();
+        setIsBuilderModeOpen(true);
+      }
+
+      if (modKey && e.key === 'k') {
+        e.preventDefault();
+        setIsTerminalOpen(true);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleImmediateSave, handleRunWithStreaming]);
+  }, [handleImmediateSave, handleRunWithStreaming, isInlineOpen]);
 
   const handleRun = async () => {
     if (!project) return;
@@ -1115,22 +1143,65 @@ export default function Editor() {
               <div className="flex-1 min-h-0 flex flex-col">
                 <ResizablePanelGroup direction="vertical" className="flex-1">
                   <ResizablePanel defaultSize={isTerminalOpen ? 55 : 70} minSize={20}>
-                    {activeTabData ? (
-                      <CodeEditor
-                        ref={codeEditorRef}
-                        value={activeTabData.content}
-                        onChange={handleEditorChange}
-                        language={getFileLanguage(activeTabData.name)}
-                      />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-muted-foreground bg-muted/10">
-                        <div className="text-center">
-                          <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                          <p className="mb-1 font-medium">No file open</p>
-                          <p className="text-sm text-muted-foreground/70">Select a file from the explorer to start editing</p>
+                    <div className="h-full flex flex-col">
+                      <div className="flex-1 relative">
+                        {activeTabData ? (
+                          <>
+                            <CodeEditor
+                              ref={codeEditorRef}
+                              value={activeTabData.content}
+                              onChange={handleEditorChange}
+                              language={getFileLanguage(activeTabData.name)}
+                            />
+                            <InlineSuggestion
+                              isOpen={isInlineOpen}
+                              position={inlinePosition}
+                              currentCode={activeTabData.content}
+                              language={getFileLanguage(activeTabData.name)}
+                              filePath={activeTabData.path}
+                              projectFiles={projectFiles}
+                              onClose={() => setIsInlineOpen(false)}
+                              onAccept={(code) => {
+                                handleEditorChange(activeTabData.content + '\n' + code);
+                                setIsInlineOpen(false);
+                              }}
+                              onInsert={(code) => {
+                                handleEditorChange(activeTabData.content + '\n' + code);
+                              }}
+                            />
+                          </>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-muted-foreground bg-muted/10">
+                            <div className="text-center">
+                              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                              <p className="mb-1 font-medium">No file open</p>
+                              <p className="text-sm text-muted-foreground/70">Select a file from the explorer to start editing</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-1 bg-muted/30 border-t text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                            <span data-testid="status-agent-ready">Agent Ready</span>
+                          </div>
+                          <span className="text-muted-foreground/50">|</span>
+                          <span data-testid="status-ai-model">{selectedAIModel}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span data-testid="status-file-count">{projectFiles.length} files</span>
+                          {activeTabData && (
+                            <>
+                              <span className="text-muted-foreground/50">|</span>
+                              <span>{getFileLanguage(activeTabData.name)}</span>
+                            </>
+                          )}
+                          <span className="text-muted-foreground/50">|</span>
+                          <span className="font-mono text-[10px] opacity-70">Cmd+I: Inline AI</span>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </ResizablePanel>
                   <ResizableHandle withHandle className="h-1 bg-border/50 hover:bg-primary/20 transition-colors" />
                   <ResizablePanel defaultSize={isTerminalOpen ? 20 : 30} minSize={10} maxSize={50}>
