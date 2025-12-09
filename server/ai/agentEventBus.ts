@@ -5,6 +5,7 @@ export type AgentEventType =
   | "step_start"
   | "step_end"
   | "file_action"
+  | "files_changed"
   | "model_output"
   | "error"
   | "done";
@@ -27,11 +28,17 @@ export interface AgentFileAction {
   timestamp: number;
 }
 
+export interface AgentFilesChangedEvent {
+  filesCreated: string[];
+  filesModified: string[];
+  filesDeleted: string[];
+}
+
 export interface AgentEvent {
   runId: string;
   type: AgentEventType;
   timestamp: number;
-  data: AgentStatusEvent | AgentStepEvent | AgentFileActionEvent | AgentModelOutputEvent | AgentErrorEvent | AgentDoneEvent;
+  data: AgentStatusEvent | AgentStepEvent | AgentFileActionEvent | AgentFilesChangedEvent | AgentModelOutputEvent | AgentErrorEvent | AgentDoneEvent;
 }
 
 export interface AgentStatusEvent {
@@ -167,6 +174,19 @@ class AgentEventBus extends EventEmitter {
       type: "done",
       timestamp: Date.now(),
       data: result,
+    });
+  }
+
+  filesChanged(runId: string, created: string[], modified: string[], deleted: string[]): void {
+    this.publishAgentEvent({
+      runId,
+      type: "files_changed",
+      timestamp: Date.now(),
+      data: {
+        filesCreated: created,
+        filesModified: modified,
+        filesDeleted: deleted,
+      } as AgentFilesChangedEvent,
     });
   }
 }

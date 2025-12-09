@@ -353,6 +353,7 @@ Generate the complete implementation. Return JSON with "files" array containing 
           await fs.promises.unlink(fullPath);
           this.filesDeleted.push(file.path);
           this.emitFileAction("delete", file.path, `Deleted ${file.path}`);
+          agentEventBus.filesChanged(this.runId, [], [], [file.path]);
         }
       } else {
         await fs.promises.mkdir(dir, { recursive: true });
@@ -363,9 +364,11 @@ Generate the complete implementation. Return JSON with "files" array containing 
         if (exists) {
           this.filesModified.push(file.path);
           this.emitFileAction("edit", file.path, `Modified ${file.path}`);
+          agentEventBus.filesChanged(this.runId, [], [file.path], []);
         } else {
           this.filesCreated.push(file.path);
           this.emitFileAction("create", file.path, `Created ${file.path}`);
+          agentEventBus.filesChanged(this.runId, [file.path], [], []);
         }
       }
     } catch (error: any) {

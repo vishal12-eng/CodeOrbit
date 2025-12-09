@@ -5,6 +5,7 @@ import { insertProjectSchema, insertApiKeySchema, apiKeyProviderEnum, type FileN
 import aiRoutes from "./ai/routes";
 import agentRoutes from "./ai/agentRoutes";
 import codewizardRoutes from "./ai/codewizard";
+import fileController from "./fileController";
 import { isAuthenticated } from "./replitAuth";
 import { 
   runProject, 
@@ -207,6 +208,7 @@ export async function registerRoutes(
   app.use('/api/ai', aiRoutes);
   app.use('/api/agent', agentRoutes);
   app.use('/api/codewizard', codewizardRoutes);
+  app.use('/api/files', fileController);
 
   app.post('/api/format', async (req: any, res) => {
     try {
