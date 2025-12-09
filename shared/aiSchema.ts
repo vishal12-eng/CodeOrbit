@@ -48,6 +48,71 @@ export interface AIStreamChunk {
   timestamp: number;
 }
 
+export type AIStreamEventType =
+  | "connected"
+  | "thinking:start"
+  | "thinking:step"
+  | "thinking:update"
+  | "action:fileRead"
+  | "action:fileWrite"
+  | "action:fileCreate"
+  | "action:fileDelete"
+  | "action:planGenerated"
+  | "action:implementation"
+  | "action:build"
+  | "action:complete"
+  | "stream:token"
+  | "stream:section"
+  | "stream:done"
+  | "error";
+
+export interface StreamThinkingEvent {
+  step: number;
+  totalSteps?: number;
+  message: string;
+  status: "pending" | "active" | "complete";
+}
+
+export interface StreamTokenEvent {
+  token: string;
+  sectionId?: string;
+  sectionType?: AIResponseSection["type"];
+}
+
+export interface StreamSectionEvent {
+  section: Partial<AIResponseSection>;
+  isComplete: boolean;
+}
+
+export interface StreamActionEvent {
+  action: FileAction;
+  index: number;
+  total: number;
+}
+
+export interface StreamPlanEvent {
+  summary: string;
+  steps: Array<{
+    id: string;
+    description: string;
+    status: "pending" | "active" | "complete";
+  }>;
+}
+
+export interface StreamCompleteEvent {
+  model: string;
+  totalTokens?: number;
+  processingTime: number;
+  sectionsCount: number;
+  actionsCount: number;
+}
+
+export interface StreamErrorEvent {
+  message: string;
+  code?: string;
+  timestamp: number;
+}
+
 export const sectionTitles: Record<AIResponseSection["type"], string> = {
   goal: "Goal",
   analysis: "Analysis",

@@ -21,10 +21,12 @@ import {
   chatWithModel,
   generateWithModel,
   getAvailableModels,
+  streamWithModel,
   ModelId,
   AVAILABLE_MODELS,
   ChatMessage,
 } from "./models";
+import { createSSEWriter, simulateThinkingSteps } from "./events";
 import {
   generateBuildPlan,
   executeBuildStep,
@@ -131,27 +133,83 @@ router.post("/chat/structured", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/chat/stream", async (req: Request, res: Response) => {
+router.post("/chat/stream", async (req: Request, res: Response) => {
+  const writer = createSSEWriter(res);
+  
   try {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-    res.flushHeaders();
-
-    const sendEvent = (event: string, data: unknown) => {
-      res.write(`event: ${event}\n`);
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    const { messages, context, model, mode } = req.body as {
+      messages: ChatMessage[];
+      context?: string;
+      model?: ModelId;
+      mode?: string;
     };
 
-    sendEvent("connected", { timestamp: Date.now() });
-    sendEvent("complete", { message: "Streaming not yet implemented for this model" });
-    res.end();
+    if (!messages || !Array.isArray(messages)) {
+      writer.error("Messages array required", "VALIDATION_ERROR");
+      writer.end();
+      return;
+    }
+
+    writer.connected();
+
+    const thinkingSteps = [
+      "Analyzing your request...",
+      "Processing context and files...",
+      "Generating response...",
+    ];
+    
+    writer.thinkingStart(thinkingSteps[0]);
+
+    const systemPrompt = mode === "bolt" || mode === "builder"
+      ? getSystemPromptForMode("bolt", context)
+      : getSystemPromptForMode(mode || "chat", context);
+
+    const allMessages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...messages,
+    ];
+
+    await simulateThinkingSteps(writer, thinkingSteps);
+
+    const selectedModel: ModelId = model || "gpt-4o";
+    let currentSectionId = "main";
+    let accumulatedContent = "";
+
+    const response = await streamWithModel(
+      allMessages,
+      selectedModel,
+      (token: string, done: boolean) => {
+        if (writer.closed) return;
+        
+        if (!done && token) {
+          accumulatedContent += token;
+          writer.streamToken(token, currentSectionId, "text");
+          
+          if (token.includes("## ") || token.includes("# ")) {
+            const sectionMatch = accumulatedContent.match(/##?\s+([^\n]+)/g);
+            if (sectionMatch) {
+              const lastHeader = sectionMatch[sectionMatch.length - 1];
+              currentSectionId = lastHeader.replace(/##?\s+/, "").toLowerCase().replace(/\s+/g, "-");
+            }
+          }
+        }
+      }
+    );
+
+    writer.streamSection({ 
+      id: "response",
+      type: "text",
+      content: accumulatedContent,
+      title: "Response"
+    }, true);
+
+    writer.complete(response.model, response.tokensUsed);
+    writer.end();
+
   } catch (error: any) {
     console.error("AI stream error:", error);
-    if (!res.headersSent) {
-      res.status(500).json({ message: error.message || "Stream failed" });
-    }
+    writer.error(error.message || "Stream failed", "STREAM_ERROR");
+    writer.end();
   }
 });
 

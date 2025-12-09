@@ -14,6 +14,7 @@ import {
   ChevronDown,
   Zap,
   Bot,
+  StopCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,7 +37,9 @@ import { useToast } from "@/hooks/use-toast";
 import { AIMessage } from "./AIMessage";
 import { AIHeader } from "./AIHeader";
 import { ActionList } from "./ActionList";
-import type { StructuredAIResponse, FileAction } from "@shared/aiSchema";
+import { AIProgressBubble } from "./AIProgressBubble";
+import { useSSEChat } from "@/hooks/useSSEChat";
+import type { StructuredAIResponse, FileAction, StreamThinkingEvent } from "@shared/aiSchema";
 
 interface Message {
   id: string;
@@ -117,9 +120,35 @@ export default function AIPanel({
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [currentActionCount, setCurrentActionCount] = useState(0);
+  const [useStreaming, setUseStreaming] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const {
+    isThinking,
+    isStreaming,
+    isComplete,
+    thinkingSteps,
+    streamedContent,
+    actions: streamActions,
+    model: streamModel,
+    error: streamError,
+    startStream,
+    stopStream,
+    reset: resetStream,
+  } = useSSEChat({
+    onComplete: (data) => {
+      addAssistantMessage(streamedContent, data.model, undefined);
+    },
+    onError: (error) => {
+      toast({
+        title: "Streaming Error",
+        description: error,
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleSpeechTranscript = useCallback((text: string, isFinal: boolean) => {
     if (isFinal) {
@@ -242,6 +271,20 @@ export default function AIPanel({
       } else {
         switch (mode) {
           case "chat":
+            if (useStreaming) {
+              resetStream();
+              startStream({
+                messages: [
+                  ...messages.map((m) => ({ role: m.role, content: m.content })),
+                  { role: "user", content: input },
+                ],
+                context: `${fileContext ? `${fileContext}\n\n` : ""}${projectContext ? `Project context:\n${projectContext}` : ""}`,
+                model: selectedModel,
+                mode: "chat",
+              });
+              setIsLoading(false);
+              return;
+            }
             response = await apiRequest("POST", "/api/ai/chat/structured", {
               messages: [
                 ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -593,6 +636,26 @@ export default function AIPanel({
               )}
             </div>
           ))}
+          {(isThinking || isStreaming) && (
+            <div className="space-y-3 mr-6" data-testid="streaming-container">
+              {isThinking && thinkingSteps.length > 0 && (
+                <AIProgressBubble 
+                  steps={thinkingSteps.map((s, i) => ({ 
+                    id: i, 
+                    message: s.message, 
+                    status: s.status 
+                  }))}
+                  isVisible={isThinking}
+                />
+              )}
+              {isStreaming && streamedContent && (
+                <div className="p-4 rounded-lg text-sm bg-card border animate-in fade-in-50 duration-200">
+                  <div className="whitespace-pre-wrap break-words leading-relaxed">{streamedContent}</div>
+                  <span className="inline-block w-2 h-4 bg-primary/60 animate-pulse ml-0.5" />
+                </div>
+              )}
+            </div>
+          )}
           {isLoading && (
             <div className="flex items-center gap-2 text-muted-foreground py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -670,20 +733,33 @@ export default function AIPanel({
               disabled={isLoading}
             />
           </div>
-          <Button
-            onClick={handleSend}
-            disabled={isLoading || (!input.trim() && attachedImages.length === 0)}
-            size="sm"
-            className="h-7 gap-1.5 text-xs"
-            data-testid="button-send-ai-message"
-          >
-            {isLoading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="h-3.5 w-3.5" />
-            )}
-            {panelMode === "builder" ? "Build" : "Send"}
-          </Button>
+          {(isThinking || isStreaming) ? (
+            <Button
+              onClick={stopStream}
+              variant="destructive"
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              data-testid="button-stop-streaming"
+            >
+              <StopCircle className="h-3.5 w-3.5" />
+              Stop
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || (!input.trim() && attachedImages.length === 0)}
+              size="sm"
+              className="h-7 gap-1.5 text-xs"
+              data-testid="button-send-ai-message"
+            >
+              {isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+              {panelMode === "builder" ? "Build" : "Send"}
+            </Button>
+          )}
         </div>
       </div>
     </div>
