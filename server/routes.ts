@@ -209,6 +209,7 @@ export async function registerRoutes(
   app.use('/api/ai', aiRoutes);
   app.use('/api/agent', agentRoutes);
   app.use('/api/codewizard', codewizardRoutes);
+  app.use('/api/composer', composerRoutes);
   app.use('/api/files', fileController);
 
   app.post('/api/format', async (req: any, res) => {
