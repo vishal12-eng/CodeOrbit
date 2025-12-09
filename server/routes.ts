@@ -5,6 +5,7 @@ import { insertProjectSchema, insertApiKeySchema, apiKeyProviderEnum, type FileN
 import aiRoutes from "./ai/routes";
 import agentRoutes from "./ai/agentRoutes";
 import codewizardRoutes from "./ai/codewizard";
+import composerRoutes from "./ai/composerRoutes";
 import fileController from "./fileController";
 import { isAuthenticated } from "./replitAuth";
 import { 
