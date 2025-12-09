@@ -41,6 +41,7 @@ import { ActionList } from "./ActionList";
 import { AIProgressBubble } from "./AIProgressBubble";
 import { useSSEChat } from "@/hooks/useSSEChat";
 import AgentPanel from "./AgentPanel";
+import CodeWizardPanel from "./CodeWizardPanel";
 import type { StructuredAIResponse, FileAction, StreamThinkingEvent } from "@shared/aiSchema";
 
 interface Message {
@@ -62,7 +63,7 @@ interface AIPanelProps {
 }
 
 type AIMode = "chat" | "edit" | "builder" | "debug" | "tests" | "docs";
-type PanelMode = "chat" | "builder" | "agent";
+type PanelMode = "chat" | "builder" | "agent" | "wizard";
 
 type ModelId = 
   | "gpt-4o"
@@ -117,7 +118,7 @@ export default function AIPanel({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<AIMode>("chat");
-  const [panelMode, setPanelMode] = useState<PanelMode>("chat");
+  const [panelMode, setPanelMode] = useState<PanelMode>("wizard");
   const [selectedModel, setSelectedModel] = useState<ModelId>("gpt-4o");
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
@@ -462,7 +463,12 @@ export default function AIPanel({
 
       <div className="px-3 py-2 border-b bg-muted/20">
         <Tabs value={panelMode} onValueChange={(v) => setPanelMode(v as PanelMode)}>
-          <TabsList className="h-8 w-full grid grid-cols-3">
+          <TabsList className="h-8 w-full grid grid-cols-4">
+            <TabsTrigger value="wizard" className="gap-1 text-xs" data-testid="tab-wizard-mode">
+              <Sparkles className="h-3.5 w-3.5 text-violet-500" />
+              <span className="hidden sm:inline">CodeWizard</span>
+              <span className="sm:hidden">AI</span>
+            </TabsTrigger>
             <TabsTrigger value="chat" className="gap-1.5 text-xs" data-testid="tab-chat-mode">
               <MessageSquare className="h-3.5 w-3.5" />
               Chat
@@ -527,7 +533,13 @@ export default function AIPanel({
         )}
       </div>
 
-      {panelMode === "agent" ? (
+      {panelMode === "wizard" ? (
+        <CodeWizardPanel 
+          currentFile={currentFile}
+          projectContext={projectContext}
+          onApplyCode={onApplyCode}
+        />
+      ) : panelMode === "agent" ? (
         <AgentPanel projectContext={projectContext} />
       ) : (
         <>

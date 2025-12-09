@@ -1,10 +1,32 @@
-# NovaCode IDE
+# NOVA CODE IDE PRO
 
 ## Overview
 
-NovaCode IDE is a comprehensive AI-powered cloud development environment comparable to Replit, Cursor AI, and Bolt. It provides a browser-based coding environment with Monaco editor integration, multi-language support, real-time code execution with streaming output, integrated AI assistance with multiple models (GPT-4, Claude, Gemini, Grok), and WebSocket-based real-time features. The application emphasizes simplicity and productivity with a clean, modern interface.
+NOVA CODE IDE PRO is a comprehensive AI-powered cloud development environment comparable to Replit, Cursor AI, and Bolt. It provides a browser-based coding environment with Monaco editor integration, multi-language support, real-time code execution with streaming output, integrated AI assistance with multiple models (GPT-4, Claude, Gemini, Grok), and WebSocket-based real-time features. The application emphasizes simplicity and productivity with a clean, modern interface.
+
+The platform includes **CodeWizard**, an embedded agentic AI assistant that understands natural language (English + Hinglish), generates code, and performs live file operations within projects.
 
 ## Recent Changes (December 2025)
+
+### Phase 12: CodeWizard AI Assistant (Latest)
+- **CodeWizard Panel**: New AI assistant tab with agentic capabilities
+  - Natural language support (English + Hinglish)
+  - File operations: create, edit, delete, read files
+  - Diff viewing and one-click apply changes
+  - Conversation history with context retention
+  - Located in `client/src/components/ai/CodeWizardPanel.tsx`
+
+- **Backend CodeWizard API**: 
+  - Endpoint: POST `/api/codewizard` for AI-powered code generation
+  - SSE streaming: GET `/api/codewizard/stream` for real-time responses
+  - File operation tools integrated with project context
+  - Located in `server/ai/codewizard.ts`
+
+- **Branding Updates**:
+  - Updated Logo component with "IDE PRO" badge and gradient styling
+  - Sparkles icon accent for premium branding
+  - AIPanel now defaults to CodeWizard tab
+  - AIHeader updated to support wizard and agent modes
 
 ### Phase 1: WebSocket Streaming
 - Created `server/websocket.ts` with real-time streaming for terminal, runner logs, AI output, and console

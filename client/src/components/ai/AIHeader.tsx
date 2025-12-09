@@ -30,7 +30,7 @@ interface ModelOption {
 interface AIHeaderProps {
   title?: string;
   subtitle?: string;
-  mode?: "chat" | "builder" | "edit" | "debug";
+  mode?: "chat" | "builder" | "edit" | "debug" | "agent" | "wizard";
   selectedModel?: string;
   models?: ModelOption[];
   onModelChange?: (modelId: string) => void;
@@ -46,6 +46,8 @@ const modeConfig = {
   builder: { icon: Wand2, label: "Builder", color: "text-purple-500" },
   edit: { icon: Bot, label: "Edit", color: "text-orange-500" },
   debug: { icon: Bot, label: "Debug", color: "text-red-500" },
+  agent: { icon: Bot, label: "Agent", color: "text-cyan-500" },
+  wizard: { icon: Sparkles, label: "CodeWizard", color: "text-violet-500" },
 };
 
 const modelTypeColors: Record<string, string> = {

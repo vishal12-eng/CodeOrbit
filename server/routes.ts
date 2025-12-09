@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertProjectSchema, insertApiKeySchema, apiKeyProviderEnum, type FileNode, type ApiKeyProvider } from "@shared/schema";
 import aiRoutes from "./ai/routes";
 import agentRoutes from "./ai/agentRoutes";
+import codewizardRoutes from "./ai/codewizard";
 import { isAuthenticated } from "./replitAuth";
 import { 
   runProject, 
@@ -90,6 +91,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   app.use('/api/ai', aiRoutes);
   app.use('/api/agent', agentRoutes);
+  app.use('/api/codewizard', codewizardRoutes);
 
   app.post('/api/format', async (req: any, res) => {
     try {
